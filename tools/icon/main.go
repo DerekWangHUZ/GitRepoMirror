@@ -1,65 +1,128 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"image"
 	"image/color"
-	"image/draw"
 	"image/png"
 	"os"
 )
 
 const size = 512
 
+var gitOrange = color.RGBA{R: 240, G: 80, B: 51, A: 255}
+
 func main() {
-	canvas := image.NewRGBA(image.Rect(0, 0, size, size))
-	draw.Draw(canvas, canvas.Bounds(), image.NewUniform(color.RGBA{R: 244, G: 248, B: 252, A: 255}), image.Point{}, draw.Src)
-	for y := 32; y < 480; y++ {
-		for x := 32; x < 480; x++ {
-			if insideRoundedSquare(x, y, 32, 480, 116) {
-				t := float64(x+y-64) / 896
-				canvas.SetRGBA(x, y, color.RGBA{R: uint8(40 - 35*t), G: uint8(89 + 76*t), B: uint8(199 - 16*t), A: 255})
-			}
-		}
-	}
-	white := color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	drawLine(canvas, 142, 146, 256, 90, 24, white)
-	drawLine(canvas, 256, 90, 370, 146, 24, white)
-	drawLine(canvas, 370, 146, 256, 203, 24, white)
-	drawLine(canvas, 256, 203, 142, 146, 24, white)
-	drawLine(canvas, 142, 203, 256, 259, 24, white)
-	drawLine(canvas, 256, 259, 370, 203, 24, white)
-	drawLine(canvas, 142, 203, 142, 296, 24, white)
-	drawLine(canvas, 142, 296, 256, 353, 24, white)
-	drawLine(canvas, 256, 353, 370, 296, 24, white)
-	drawLine(canvas, 370, 296, 370, 203, 24, white)
-	drawLine(canvas, 142, 296, 142, 366, 24, white)
-	drawLine(canvas, 142, 366, 256, 422, 24, white)
-	drawLine(canvas, 256, 422, 370, 366, 24, white)
-	drawLine(canvas, 370, 366, 370, 296, 24, white)
-	file, err := os.Create("build/appicon.png")
-	if err != nil {
+	if err := writePNG("build/appicon.png", renderIcon(size)); err != nil {
 		panic(err)
 	}
-	defer file.Close()
-	if err := png.Encode(file, canvas); err != nil {
+	if err := writeICO("build/windows/icon.ico", []int{16, 20, 24, 32, 40, 48, 64, 128, 256}); err != nil {
 		panic(err)
 	}
 }
 
-func insideRoundedSquare(x, y, min, max, radius int) bool {
-	if x >= min+radius && x < max-radius || y >= min+radius && y < max-radius {
-		return true
+func renderIcon(iconSize int) *image.RGBA {
+	canvas := image.NewRGBA(image.Rect(0, 0, iconSize, iconSize))
+	stroke := iconSize * 18 / 240
+	if stroke < 2 {
+		stroke = 2
 	}
-	cx := min + radius
-	if x >= max-radius {
-		cx = max - radius - 1
+	point := func(value10 int) int { return value10 * iconSize / 240 }
+
+	diamond := [][2]int{{120, 20}, {220, 120}, {120, 220}, {20, 120}, {120, 20}}
+	for index := 1; index < len(diamond); index++ {
+		drawLine(canvas, point(diamond[index-1][0]), point(diamond[index-1][1]), point(diamond[index][0]), point(diamond[index][1]), stroke, gitOrange)
 	}
-	cy := min + radius
-	if y >= max-radius {
-		cy = max - radius - 1
+	drawLine(canvas, point(96), point(96), point(144), point(144), stroke, gitOrange)
+	drawLine(canvas, point(85), point(100), point(85), point(150), stroke, gitOrange)
+	drawCircle(canvas, point(85), point(85), point(15), stroke, gitOrange)
+	drawCircle(canvas, point(155), point(155), point(15), stroke, gitOrange)
+	return canvas
+}
+
+func writePNG(path string, icon image.Image) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return err
 	}
-	dx, dy := x-cx, y-cy
-	return dx*dx+dy*dy <= radius*radius
+	defer file.Close()
+	return png.Encode(file, icon)
+}
+
+func writeICO(path string, sizes []int) error {
+	images := make([][]byte, len(sizes))
+	for index, iconSize := range sizes {
+		var data bytes.Buffer
+		if err := png.Encode(&data, renderIcon(iconSize)); err != nil {
+			return err
+		}
+		images[index] = data.Bytes()
+	}
+
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	if err := binary.Write(file, binary.LittleEndian, uint16(0)); err != nil {
+		return err
+	}
+	if err := binary.Write(file, binary.LittleEndian, uint16(1)); err != nil {
+		return err
+	}
+	if err := binary.Write(file, binary.LittleEndian, uint16(len(images))); err != nil {
+		return err
+	}
+
+	offset := uint32(6 + 16*len(images))
+	for index, data := range images {
+		iconSize := sizes[index]
+		width, height := byte(iconSize), byte(iconSize)
+		if iconSize == 256 {
+			width, height = 0, 0
+		}
+		if _, err := file.Write([]byte{width, height, 0, 0}); err != nil {
+			return err
+		}
+		if err := binary.Write(file, binary.LittleEndian, uint16(1)); err != nil {
+			return err
+		}
+		if err := binary.Write(file, binary.LittleEndian, uint16(32)); err != nil {
+			return err
+		}
+		if err := binary.Write(file, binary.LittleEndian, uint32(len(data))); err != nil {
+			return err
+		}
+		if err := binary.Write(file, binary.LittleEndian, offset); err != nil {
+			return err
+		}
+		offset += uint32(len(data))
+	}
+	for _, data := range images {
+		if _, err := file.Write(data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func drawCircle(img *image.RGBA, cx, cy, radius, width int, fill color.RGBA) {
+	outer := radius + width/2
+	inner := radius - width/2
+	if inner < 0 {
+		inner = 0
+	}
+	for y := cy - outer; y <= cy+outer; y++ {
+		for x := cx - outer; x <= cx+outer; x++ {
+			dx, dy := x-cx, y-cy
+			distance := dx*dx + dy*dy
+			if distance <= outer*outer && distance >= inner*inner && image.Pt(x, y).In(img.Bounds()) {
+				img.SetRGBA(x, y, fill)
+			}
+		}
+	}
 }
 
 func drawLine(img *image.RGBA, x0, y0, x1, y1, width int, fill color.RGBA) {
