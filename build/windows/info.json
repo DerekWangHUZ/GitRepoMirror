@@ -1,18 +1,18 @@
 {
   "fixed": {
-    "file_version": "0.1.0.2",
-    "product_version": "0.1.0.2"
+    "file_version": "0.1.0.5",
+    "product_version": "0.1.0.5"
   },
   "info": {
     "0000": {
       "CompanyName": "DerekWangHUZ",
       "FileDescription": "跨平台 Git 仓库镜像工具",
-      "FileVersion": "0.1.0-preview.2",
+      "FileVersion": "0.1.0-preview.5",
       "InternalName": "GitRepoMirror",
       "LegalCopyright": "Copyright © 2026 DerekWangHUZ",
       "OriginalFilename": "GitRepoMirror.exe",
       "ProductName": "GitRepoMirror",
-      "ProductVersion": "0.1.0-preview.2"
+      "ProductVersion": "0.1.0-preview.5"
     }
   }
 }
