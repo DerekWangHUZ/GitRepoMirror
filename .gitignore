@@ -1,0 +1,48 @@
+# Build and dependency output
+build/bin/
+.cache/
+*.exe
+*.syso
+frontend/node_modules/
+frontend/dist/*
+!frontend/dist/.gitkeep
+
+# Go, Node and Wails caches
+vendor/
+coverage/
+frontend/.vite/
+frontend/.cache/
+
+# Generated bindings and local state
+frontend/wailsjs/
+data.json
+.env.local
+.env.*.local
+.env
+.env.*
+!.env.example
+
+# Credentials and certificates
+*.pem
+*.key
+*.pfx
+*.p12
+*.crt
+*.cer
+
+# Tests, editors and operating systems
+*.test
+coverage.out
+coverage.html
+.idea/
+.vscode/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.log
+*.tmp
+*.bak
+*.swp
+*~

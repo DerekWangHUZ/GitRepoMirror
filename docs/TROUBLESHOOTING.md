@@ -1,0 +1,34 @@
+# 故障排查
+
+## 显示“凭据失效”或“缺少令牌”
+
+在应用中点击对应平台的重新登录按钮，或在终端执行：
+
+```powershell
+gh auth login --hostname github.com --web --git-protocol https
+glab auth login --hostname gitlab.com --device --git-protocol https
+```
+
+然后使用 `gh auth status` 和 `glab auth status` 验证。不要把输出中的 token 分享到 Issue。
+
+## GitLab 返回 HTTP Basic: Access denied
+
+Windows Credential Manager 中可能仍有过期的 HTTPS 凭据。重新运行 `glab auth login` 并选择让 GitLab CLI 配置 Git 凭据，然后再次检查目标仓库访问权限。
+
+## 目标仓库已经存在
+
+创建镜像时选择“关联已有仓库”，或选择“自动添加数字后缀”。只有确认目标仓库专门用于镜像时才应关联；完整镜像会覆盖和清理目标端分支、标签。
+
+## 无法访问源仓库
+
+- 确认 URL 正确，且当前账号对私有仓库有读取权限
+- 检查代理设置和防火墙是否允许访问托管平台 443 端口
+- 对组织仓库确认 OAuth token 已通过组织 SSO 授权
+
+## Git LFS 同步失败
+
+确认已安装 Git LFS，并验证源端允许下载、目标端允许上传 LFS 对象。普通 Git 引用成功并不代表所有 LFS 对象已成功传输。
+
+## 日志中的命令退出
+
+“命令退出”表示底层 CLI 返回非零状态。请查看它之前的标准错误行；常见原因包括权限不足、仓库保护规则、网络中断和凭据失效。
