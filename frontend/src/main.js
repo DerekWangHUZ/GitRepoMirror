@@ -36,6 +36,10 @@ app.innerHTML = `
           <button class="light max" id="maxBtn" aria-label="最大化"></button>
         </div>
       </div>
+      <div class="sidebar-identity" data-wails-drag>
+        <div class="title"><span class="title-mark">${icons.git}</span> GitRepoMirror</div>
+        <div class="env-pill" id="envPill" data-wails-no-drag><i></i><span>正在检查环境</span></div>
+      </div>
       <div class="sidebar-navigation">
         <div class="sidebar-label">工作台</div>
         <button class="nav active" data-view="repositories">${icons.git}<span>镜像仓库</span><b id="repoCount">0</b></button>
@@ -46,11 +50,6 @@ app.innerHTML = `
       <div class="environment-card" id="environmentCard"></div>
     </aside>
     <div class="main-area">
-      <header class="titlebar" data-wails-drag>
-        <div class="title"><span class="title-mark">${icons.git}</span> GitRepoMirror</div>
-        <div class="titlebar-spacer"></div>
-        <div class="env-pill" id="envPill" data-wails-no-drag><i></i><span>正在检查环境</span></div>
-      </header>
       <section class="content">
         <div id="repositoriesView" class="view"></div>
         <div id="logsView" class="view hidden"></div>
