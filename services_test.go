@@ -43,7 +43,7 @@ func TestSyncEngineEmitsStableProgressContract(t *testing.T) {
 		Source: RemoteSpec{Platform: PlatformGeneric, CloneURL: "https://code.example/source.git"},
 		Target: RemoteSpec{Platform: PlatformGeneric, CloneURL: "https://code.example/target.git"},
 	}
-	if err := app.performSync(repo, false); err != nil {
+	if err := app.performSync(repo, false, EnvironmentStatus{}); err != nil {
 		t.Fatal(err)
 	}
 	var got []string
@@ -62,7 +62,7 @@ func TestSyncEngineMarksCloneFailure(t *testing.T) {
 	app.events = events
 	app.quietHook = func(_ string, _ string, _ ...string) (string, error) { return "", nil }
 	app.commandHook = func(_ string, _ string, _ string, _ ...string) error { return errors.New("offline") }
-	err := app.performSync(Repository{ID: "failure", Mode: "mirror", Source: RemoteSpec{Platform: PlatformGeneric}}, false)
+	err := app.performSync(Repository{ID: "failure", Mode: "mirror", Source: RemoteSpec{Platform: PlatformGeneric}}, false, EnvironmentStatus{})
 	if err == nil {
 		t.Fatal("expected clone failure")
 	}

@@ -32,12 +32,17 @@ func (a *App) CreateMirror(req MirrorRequest) (Repository, error) {
 		return Repository{}, fmt.Errorf("未找到 Git，无法执行同步")
 	}
 	id := newID()
+	_, finish, err := a.operations.begin(a.commandContext(), id, false)
+	if err != nil {
+		return Repository{}, err
+	}
+	defer finish()
 	target, management, visibility, err := a.resolveTarget(id, req, source, environment)
 	if err != nil {
 		return Repository{}, err
 	}
 	repo := Repository{ID: id, Source: source, Target: target, ManagementMode: management, Visibility: visibility, Mode: req.Mode, Status: "syncing", CreatedAt: time.Now()}
-	if err := a.performSync(repo, req.SyncLFS); err != nil {
+	if err := a.performSync(repo, req.SyncLFS, environment); err != nil {
 		repo.Status, repo.LastError = "failed", err.Error()
 		if saveErr := a.upsertRepository(repo); saveErr != nil {
 			return repo, errors.Join(err, saveErr)
@@ -97,16 +102,26 @@ func (a *App) resolveTarget(id string, req MirrorRequest, source RemoteSpec, env
 }
 
 func (a *App) SyncRepository(id string) error {
+	return a.syncRepository(id, false)
+}
+
+func (a *App) syncRepository(id string, batchMember bool) error {
 	repo, ok := a.repositoryByID(id)
 	if !ok {
 		return fmt.Errorf("未找到仓库记录")
 	}
+	_, finish, err := a.operations.begin(a.commandContext(), id, batchMember)
+	if err != nil {
+		return err
+	}
+	defer finish()
 	syncLFS := a.store.Settings().SyncLFS
+	environment := a.CheckEnvironment()
 	repo.Status, repo.LastError = "syncing", ""
 	if err := a.upsertRepository(repo); err != nil {
 		return err
 	}
-	err := a.performSync(repo, syncLFS)
+	err = a.performSync(repo, syncLFS, environment)
 	if err != nil {
 		repo.Status, repo.LastError = "failed", err.Error()
 	} else {
@@ -119,6 +134,11 @@ func (a *App) SyncRepository(id string) error {
 }
 
 func (a *App) SyncAll() error {
+	finishBatch, err := a.operations.beginBatch()
+	if err != nil {
+		return err
+	}
+	defer finishBatch()
 	snapshot := a.store.Snapshot()
 	repositories := snapshot.Repositories
 	limit := snapshot.Settings.Concurrency
@@ -136,7 +156,7 @@ func (a *App) SyncAll() error {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			if err := a.SyncRepository(repository.ID); err != nil {
+			if err := a.syncRepository(repository.ID, true); err != nil {
 				errorsMu.Lock()
 				messages = append(messages, repository.Source.DisplayName+": "+err.Error())
 				errorsMu.Unlock()

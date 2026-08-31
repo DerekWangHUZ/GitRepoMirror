@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -41,6 +42,50 @@ func TestSyncAllHonorsConcurrencyLimit(t *testing.T) {
 	}
 	if maximum.Load() != 2 {
 		t.Fatalf("expected concurrency 2, got %d", maximum.Load())
+	}
+}
+
+func TestSyncRepositoryRejectsOverlappingRun(t *testing.T) {
+	t.Setenv("APPDATA", t.TempDir())
+	app := NewApp()
+	data := app.store.Snapshot()
+	data.Repositories = []Repository{{
+		ID: "busy", Mode: "mirror", Status: "healthy",
+		Source: RemoteSpec{Platform: PlatformGeneric, CloneURL: "https://code.example/source.git"},
+		Target: RemoteSpec{Platform: PlatformGeneric, CloneURL: "https://code.example/target.git"},
+	}}
+	app.store.Replace(data)
+	app.quietHook = func(_ string, _ string, _ ...string) (string, error) { return "", nil }
+	started := make(chan struct{})
+	release := make(chan struct{})
+	app.commandHook = func(_ string, _ string, _ string, args ...string) error {
+		if len(args) > 0 && args[0] == "clone" {
+			close(started)
+			<-release
+		}
+		return nil
+	}
+	result := make(chan error, 1)
+	go func() { result <- app.SyncRepository("busy") }()
+	<-started
+	if err := app.SyncRepository("busy"); err == nil || !strings.Contains(err.Error(), "正在同步") {
+		t.Fatalf("expected overlapping sync to be rejected, got %v", err)
+	}
+	close(release)
+	if err := <-result; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGetDataFlushesStartupErrorAfterEventSubscription(t *testing.T) {
+	app := NewApp()
+	events := &recordingEventSink{}
+	app.events = events
+	app.queueStartupLog("配置文件已恢复")
+	app.GetData()
+	app.GetData()
+	if len(events.logs) != 1 || events.logs[0].Message != "配置文件已恢复" {
+		t.Fatalf("startup error should be emitted once: %#v", events.logs)
 	}
 }
 

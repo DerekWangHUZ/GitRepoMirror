@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Runner is the narrow process boundary consumed by application services.
@@ -40,10 +41,15 @@ func (a *App) runQuietIn(dir, name string, args ...string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.CommandContext(a.commandContext(), resolved, args...)
+	ctx, cancel := context.WithTimeout(a.commandContext(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, resolved, args...)
 	cmd.Dir, cmd.Env = dir, a.commandEnv()
 	hideCommandWindow(cmd)
 	output, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		return string(output), fmt.Errorf("命令探测超时或已取消: %w", ctx.Err())
+	}
 	return string(output), err
 }
 func (a *App) runCommand(id, name string, args ...string) error {
@@ -58,7 +64,8 @@ func (a *App) runCommandIn(id, dir, name string, args ...string) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(a.commandContext(), resolved, args...)
+	ctx := a.operations.context(id, a.commandContext())
+	cmd := exec.CommandContext(ctx, resolved, args...)
 	cmd.Dir, cmd.Env = dir, a.commandEnv()
 	hideCommandWindow(cmd)
 	stdout, err := cmd.StdoutPipe()
@@ -86,6 +93,9 @@ func (a *App) runCommandIn(id, dir, name string, args ...string) error {
 	go stream(stderr, "stderr")
 	wg.Wait()
 	if err := cmd.Wait(); err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("命令已取消: %w", ctx.Err())
+		}
 		return fmt.Errorf("命令退出: %w", err)
 	}
 	return nil

@@ -101,6 +101,7 @@ export function createActions(state, backend, renderer) {
   }
 
   async function syncOne(id) {
+    if (state.busy.has(id) || state.busy.has("creating")) return;
     state.busy.add(id);
     renderer.repositories();
     renderer.consoleOutput();
@@ -118,9 +119,11 @@ export function createActions(state, backend, renderer) {
   }
 
   async function syncAll() {
+    if (state.busy.size) return;
     if (!confirm(`确认同步全部 ${state.data.repositories.length} 个仓库？`))
       return;
-    state.data.repositories.forEach((repo) => state.busy.add(repo.id));
+    const ids = state.data.repositories.map((repo) => repo.id);
+    ids.forEach((id) => state.busy.add(id));
     renderer.repositories();
     renderer.consoleOutput();
     $("#console").classList.remove("collapsed");
@@ -130,7 +133,7 @@ export function createActions(state, backend, renderer) {
     } catch (error) {
       toast(`部分仓库同步失败：${errorText(error)}`, "error");
     } finally {
-      state.busy.clear();
+      ids.forEach((id) => state.busy.delete(id));
       await refreshData();
       renderer.consoleOutput();
     }
