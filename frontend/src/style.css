@@ -1046,6 +1046,24 @@ select:focus {
     background: #29292c;
     border-color: rgba(255, 255, 255, 0.12);
   }
+  input:focus,
+  select:focus {
+    background: #2f2f33;
+  }
+  .check-row input:focus {
+    background: #5a5a60;
+  }
+  .check-row input:checked:focus {
+    background: #30b859;
+  }
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-text-fill-color: #eeeef2;
+    caret-color: #eeeef2;
+    -webkit-box-shadow: 0 0 0 1000px #29292c inset;
+  }
   .check-row input {
     background: #5a5a60;
   }
