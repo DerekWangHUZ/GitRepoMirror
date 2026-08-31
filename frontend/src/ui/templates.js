@@ -4,7 +4,7 @@ import { escapeHTML, formatTime, platformLabel } from "./utils.js";
 const platformIcon = (platform) => icons[platform] || icons.generic;
 
 export function repositoryView(repositories, busy) {
-  return `<div class="page-head"><div><h1>镜像仓库</h1><p>在不同 Git 托管平台之间保存独立副本</p></div><div class="head-actions"><button class="button secondary" id="syncAll" data-action="sync-all" ${!repositories.length ? "disabled" : ""}>${icons.sync} 全部同步</button><button class="button primary" id="newMirror" data-action="new-mirror">${icons.plus} 新建镜像</button></div></div>${repositories.length ? `<div class="repo-grid">${repositories.map((repo) => repositoryCard(repo, busy)).join("")}</div>` : emptyState()}`;
+  return `<div class="page-head"><div><h1>镜像仓库</h1><p>在不同 Git 托管平台之间保存独立副本</p></div><div class="head-actions"><button class="button secondary" id="syncAll" data-action="sync-all" ${!repositories.length || busy.size ? "disabled" : ""}>${icons.sync} 全部同步</button><button class="button primary" id="newMirror" data-action="new-mirror">${icons.plus} 新建镜像</button></div></div>${repositories.length ? `<div class="repo-grid">${repositories.map((repo) => repositoryCard(repo, busy)).join("")}</div>` : emptyState()}`;
 }
 
 export function repositoryCard(repo, busy) {

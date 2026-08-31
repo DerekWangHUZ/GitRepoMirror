@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func defaultData() StoreData {
@@ -33,12 +34,25 @@ func loadData() (StoreData, error) {
 	}
 	data := defaultData()
 	if err := json.Unmarshal(payload, &data); err != nil {
-		return StoreData{}, fmt.Errorf("配置文件格式无效: %w", err)
+		backup, backupErr := backupDamagedData(path)
+		if backupErr != nil {
+			return StoreData{}, fmt.Errorf("配置文件格式无效，且备份失败: %v: %w", backupErr, err)
+		}
+		return StoreData{}, fmt.Errorf("配置文件格式无效，已备份到 %s: %w", backup, err)
 	}
 	if data.Settings.Concurrency < 1 || data.Settings.Concurrency > 4 {
 		data.Settings.Concurrency = 2
 	}
 	return data, nil
+}
+
+func backupDamagedData(path string) (string, error) {
+	stamp := time.Now().Format("20060102-150405.000000000")
+	backup := filepath.Join(filepath.Dir(path), "data.corrupt-"+stamp+".json")
+	if err := os.Rename(path, backup); err != nil {
+		return "", err
+	}
+	return backup, nil
 }
 
 func saveData(data StoreData) error {

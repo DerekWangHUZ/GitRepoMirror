@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func (a *App) performSync(repo Repository, syncLFS bool) error {
+func (a *App) performSync(repo Repository, syncLFS bool, environment EnvironmentStatus) error {
 	tempDir, err := os.MkdirTemp("", "git-repo-mirror-*")
 	if err != nil {
 		return err
@@ -18,7 +18,7 @@ func (a *App) performSync(repo Repository, syncLFS bool) error {
 		}
 	}()
 	cloneDir := filepath.Join(tempDir, "repository")
-	clone := cloneCommand(repo.Source, cloneDir, repo.Mode, a.CheckEnvironment())
+	clone := cloneCommand(repo.Source, cloneDir, repo.Mode, environment)
 	a.emitProgress(repo.ID, 2, "拉取源仓库", "running")
 	if err := a.runCommand(repo.ID, clone.Name, clone.Args...); err != nil {
 		a.emitProgress(repo.ID, 2, "拉取源仓库", "failed")

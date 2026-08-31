@@ -53,4 +53,15 @@ func TestLoadRejectsDamagedConfiguration(t *testing.T) {
 	if _, err := loadData(); err == nil {
 		t.Fatal("expected damaged configuration error")
 	}
+	matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), "data.corrupt-*.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("expected one damaged configuration backup, got %v", matches)
+	}
+	payload, err := os.ReadFile(matches[0])
+	if err != nil || string(payload) != "{" {
+		t.Fatalf("damaged configuration was not preserved: %q, %v", payload, err)
+	}
 }

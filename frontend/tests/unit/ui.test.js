@@ -4,6 +4,7 @@ import { createRenderer } from "../../src/ui/renderer.js";
 import {
   environmentRow,
   repositoryCard,
+  repositoryView,
   settingsView,
   targetFields,
 } from "../../src/ui/templates.js";
@@ -71,6 +72,21 @@ describe("UI contracts", () => {
         "github",
       ),
     ).toContain("凭据失效");
+  });
+
+  it("disables batch sync while any repository operation is busy", () => {
+    const repositories = [
+      {
+        id: "repo",
+        status: "healthy",
+        mode: "mirror",
+        source: { platform: "generic", displayName: "source" },
+        target: { platform: "generic", displayName: "target" },
+      },
+    ];
+    expect(repositoryView(repositories, new Set(["repo"]))).toContain(
+      'id="syncAll" data-action="sync-all" disabled',
+    );
   });
 
   it("switches target fields between managed and URL modes", () => {
