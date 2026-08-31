@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { appendLog, createState } from "../../src/ui/state.js";
+import { createRenderer } from "../../src/ui/renderer.js";
 import {
   environmentRow,
   repositoryCard,
@@ -24,6 +25,22 @@ describe("UI contracts", () => {
       appendLog(state, { message: String(index) });
     expect(state.logs).toHaveLength(1000);
     expect(state.logs[0].message).toBe("5");
+  });
+
+  it("renders the empty log state during initial data rendering", () => {
+    document.body.innerHTML = `
+      <span id="repoCount"></span>
+      <div id="repositoriesView" class="view"></div>
+      <div id="logsView" class="view hidden"></div>
+      <div id="settingsView" class="view hidden"></div>
+    `;
+    const renderer = createRenderer(createState());
+
+    renderer.data();
+
+    expect(document.querySelector("#logsView").textContent).toContain(
+      "命令输出将在这里显示",
+    );
   });
 
   it.each(["healthy", "syncing", "failed"])(

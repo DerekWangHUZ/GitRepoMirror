@@ -83,6 +83,7 @@ export function createRenderer(state) {
 
   function data() {
     repositories();
+    logs();
     settings();
     showView();
   }
