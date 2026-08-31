@@ -83,4 +83,4 @@ Windows 产物位于 `build\bin\GitRepoMirror.exe`。项目结构和同步过程
 
 ## 项目状态
 
-最新版本为 `v0.1.0-preview.4`，修正了边栏顶部仍显示顶栏分隔线的问题，使边栏在视觉上完整覆盖窗口左侧。当前预览阶段重点验证 Windows 环境下的跨平台仓库镜像、CLI 认证和目标仓库管理流程。已知限制与变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+最新版本为 `v0.1.0-preview.5`，移除了主内容区顶栏，将应用信息集中到边栏，并统一了界面与 Windows EXE 的 Git 图标。当前预览阶段重点验证 Windows 环境下的跨平台仓库镜像、CLI 认证和目标仓库管理流程。已知限制与变更记录见 [CHANGELOG.md](CHANGELOG.md)。
