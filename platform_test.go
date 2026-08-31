@@ -141,7 +141,9 @@ func TestManagedRepositoryLookupDoesNotTreatNetworkErrorAsMissing(t *testing.T) 
 
 func TestGitOnlyTargetCannotBeDeletedRemotely(t *testing.T) {
 	app := NewApp()
-	app.data.Repositories = []Repository{{ID: "one", ManagementMode: ManagementGitOnly}}
+	data := app.store.Snapshot()
+	data.Repositories = []Repository{{ID: "one", ManagementMode: ManagementGitOnly}}
+	app.store.Replace(data)
 	if err := app.RemoveRepository("one", true); err == nil {
 		t.Fatal("expected remote deletion to be rejected")
 	}
