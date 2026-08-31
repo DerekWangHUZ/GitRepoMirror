@@ -38,6 +38,7 @@ coverage.out
 coverage.html
 .idea/
 .vscode/
+.workbuddy/
 *.user
 *.suo
 .DS_Store
