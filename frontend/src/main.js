@@ -28,34 +28,39 @@ let state = { data: { repositories: [], settings: { concurrency: 2 } }, env: {},
 
 app.innerHTML = `
   <main class="window-shell">
-    <header class="titlebar" data-wails-drag>
-      <div class="traffic" data-wails-no-drag>
-        <button class="light close" id="closeBtn" aria-label="关闭"></button>
-        <button class="light min" id="minBtn" aria-label="最小化"></button>
-        <button class="light max" id="maxBtn" aria-label="最大化"></button>
+    <aside class="sidebar">
+      <div class="sidebar-chrome" data-wails-drag>
+        <div class="traffic" data-wails-no-drag>
+          <button class="light close" id="closeBtn" aria-label="关闭"></button>
+          <button class="light min" id="minBtn" aria-label="最小化"></button>
+          <button class="light max" id="maxBtn" aria-label="最大化"></button>
+        </div>
       </div>
-      <div class="title"><span class="title-mark">${icons.git}</span> GitRepoMirror</div>
-      <div class="env-pill" id="envPill" data-wails-no-drag><i></i><span>正在检查环境</span></div>
-    </header>
-    <div class="workspace">
-      <aside class="sidebar">
+      <div class="sidebar-navigation">
         <div class="sidebar-label">工作台</div>
         <button class="nav active" data-view="repositories">${icons.git}<span>镜像仓库</span><b id="repoCount">0</b></button>
         <button class="nav" data-view="logs">${icons.terminal}<span>运行日志</span></button>
         <div class="sidebar-label settings-label">偏好设置</div>
         <button class="nav" data-view="settings">${icons.settings}<span>设置</span></button>
-        <div class="environment-card" id="environmentCard"></div>
-      </aside>
+      </div>
+      <div class="environment-card" id="environmentCard"></div>
+    </aside>
+    <div class="main-area">
+      <header class="titlebar" data-wails-drag>
+        <div class="title"><span class="title-mark">${icons.git}</span> GitRepoMirror</div>
+        <div class="titlebar-spacer"></div>
+        <div class="env-pill" id="envPill" data-wails-no-drag><i></i><span>正在检查环境</span></div>
+      </header>
       <section class="content">
         <div id="repositoriesView" class="view"></div>
         <div id="logsView" class="view hidden"></div>
         <div id="settingsView" class="view hidden"></div>
       </section>
+      <section class="console collapsed" id="console">
+        <button class="console-head" id="consoleToggle"><span>${icons.terminal} 实时输出</span><span id="consoleStatus">空闲</span><i>⌃</i></button>
+        <div class="console-body" id="consoleBody"></div>
+      </section>
     </div>
-    <section class="console collapsed" id="console">
-      <button class="console-head" id="consoleToggle"><span>${icons.terminal} 实时输出</span><span id="consoleStatus">空闲</span><i>⌃</i></button>
-      <div class="console-body" id="consoleBody"></div>
-    </section>
   </main>
   <div class="toast-stack" id="toasts"></div>
   <div class="modal-backdrop hidden" id="modalBackdrop">
