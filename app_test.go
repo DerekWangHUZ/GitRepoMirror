@@ -10,14 +10,16 @@ import (
 func TestSyncAllHonorsConcurrencyLimit(t *testing.T) {
 	t.Setenv("APPDATA", t.TempDir())
 	app := NewApp()
-	app.data.Settings.Concurrency = 2
+	data := app.store.Snapshot()
+	data.Settings.Concurrency = 2
 	for i := 0; i < 4; i++ {
-		app.data.Repositories = append(app.data.Repositories, Repository{
+		data.Repositories = append(data.Repositories, Repository{
 			ID: string(rune('a' + i)), Mode: "mirror", Status: "healthy",
 			Source: RemoteSpec{Platform: PlatformGeneric, CloneURL: "https://code.example/team/source.git", DisplayName: "source"},
 			Target: RemoteSpec{Platform: PlatformGeneric, CloneURL: "https://code.example/team/target.git", DisplayName: "target"},
 		})
 	}
+	app.store.Replace(data)
 	app.quietHook = func(_ string, _ string, _ ...string) (string, error) { return "", nil }
 	var active, maximum atomic.Int32
 	app.commandHook = func(_ string, _ string, _ string, args ...string) error {
@@ -45,11 +47,13 @@ func TestSyncAllHonorsConcurrencyLimit(t *testing.T) {
 func TestSyncFailureIsPersisted(t *testing.T) {
 	t.Setenv("APPDATA", t.TempDir())
 	app := NewApp()
-	app.data.Repositories = []Repository{{
+	data := app.store.Snapshot()
+	data.Repositories = []Repository{{
 		ID: "failure", Mode: "mirror", Status: "healthy",
 		Source: RemoteSpec{Platform: PlatformGeneric, CloneURL: "https://code.example/team/source.git"},
 		Target: RemoteSpec{Platform: PlatformGeneric, CloneURL: "https://code.example/team/target.git"},
 	}}
+	app.store.Replace(data)
 	app.quietHook = func(_ string, _ string, _ ...string) (string, error) { return "", nil }
 	app.commandHook = func(_ string, _ string, _ string, _ ...string) error { return errors.New("network unavailable") }
 	if err := app.SyncRepository("failure"); err == nil {

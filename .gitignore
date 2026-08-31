@@ -12,6 +12,8 @@ vendor/
 coverage/
 frontend/.vite/
 frontend/.cache/
+frontend/test-results/
+frontend/playwright-report/
 
 # Generated bindings and local state
 frontend/wailsjs/
