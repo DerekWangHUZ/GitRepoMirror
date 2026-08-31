@@ -31,7 +31,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .env-pill i, .status i { width: 7px; height: 7px; border-radius: 50%; background: #f0a000; box-shadow: 0 0 0 3px rgba(240,160,0,.12); }
 .env-pill.ok i { background: #30b859; box-shadow: 0 0 0 3px rgba(48,184,89,.12); } .env-pill.bad i { background: #ff453a; }
 .sidebar { width: 224px; height: 100%; flex: 0 0 224px; padding: 0 13px 16px; background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-.sidebar-chrome { height: 52px; flex: 0 0 52px; margin: 0 -13px; padding: 0 16px; display: flex; align-items: center; border-bottom: 1px solid var(--border); }
+.sidebar-chrome { height: 52px; flex: 0 0 52px; margin: 0 -13px; padding: 0 16px; display: flex; align-items: center; }
 .sidebar-navigation { padding-top: 23px; }
 .sidebar-label { margin: 0 10px 8px; color: #8a8a8e; font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
 .settings-label { margin-top: 25px; }
