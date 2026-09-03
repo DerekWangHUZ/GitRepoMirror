@@ -325,6 +325,11 @@ svg {
   height: 100%;
   overflow-y: auto;
   padding: 34px clamp(30px, 4.5vw, 62px) 100px;
+  transition: padding-bottom 0.28s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+/* 实时输出面板展开时（高 210px）为其让出空间，避免底部内容被遮挡 */
+.main-area:has(.console:not(.collapsed)) .view {
+  padding-bottom: 274px;
 }
 .view.hidden,
 .hidden {
