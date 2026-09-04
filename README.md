@@ -1,5 +1,7 @@
 # GitRepoMirror
 
+![GitRepoMirror project cover](docs/assets/gitrepomirror-cover.png)
+
 GitRepoMirror 是一款面向 Windows 的桌面 Git 仓库镜像工具，用于在 GitHub、GitLab 以及其他兼容 Git 的托管平台之间建立独立副本，并按需重复同步。
 
 > 完整镜像会执行强制推送，首次用于重要仓库前请确认目标仓库不包含需要保留的独立提交。
