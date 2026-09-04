@@ -16,6 +16,7 @@ GitRepoMirror 是一款面向 Windows 的桌面 Git 仓库镜像工具，用于�
 - 支持 HTTP、HTTPS、SOCKS5 代理和可选 Git LFS 对象同步
 - 提供实时命令输出、分步进度、失败记录和系统深浅色主题
 - 使用本机 `git`、`gh`、`glab`，应用自身不保存平台 token
+- GitLab HTTPS 操作复用本机 `glab` 登录状态，不额外要求 Credential Manager 登录
 
 完整镜像仅推送 `refs/heads/*` 和 `refs/tags/*`，不会复制平台维护的 Pull Request、Merge Request 等只读内部引用。
 
@@ -59,6 +60,7 @@ GitRepoMirror 是一款面向 Windows 的桌面 Git 仓库镜像工具，用于�
 设置和镜像映射保存在 `%AppData%\GitRepoMirror\data.json`。配置文件使用临时文件和原子替换写入。
 
 - 平台凭据由官方 CLI 和系统凭据存储管理
+- GitLab HTTPS 的 Git 凭据由本机 `glab auth git-credential` 临时提供，应用不会写入全局 Git 配置
 - 命令参数不经过 Shell 字符串拼接
 - 日志会隐藏 URL 中的用户名和密码
 - 通用 Git 模式不会创建、修改或删除平台项目

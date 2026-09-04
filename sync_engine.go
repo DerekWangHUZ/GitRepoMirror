@@ -19,24 +19,25 @@ func (a *App) performSync(repo Repository, syncLFS bool, environment Environment
 	}()
 	cloneDir := filepath.Join(tempDir, "repository")
 	clone := cloneCommand(repo.Source, cloneDir, repo.Mode, environment)
+	commandEnvironment := a.commandEnvForRemotes(repo.Source, repo.Target)
 	a.emitProgress(repo.ID, 2, "拉取源仓库", "running")
-	if err := a.runCommand(repo.ID, clone.Name, clone.Args...); err != nil {
+	if err := a.runCommandInWithEnv(repo.ID, "", commandEnvironment, clone.Name, clone.Args...); err != nil {
 		a.emitProgress(repo.ID, 2, "拉取源仓库", "failed")
 		return fmt.Errorf("拉取源仓库失败: %w", err)
 	}
 	a.emitProgress(repo.ID, 2, "拉取源仓库", "done")
 	a.emitProgress(repo.ID, 3, "推送目标仓库", "running")
 	if repo.Mode == "shallow" {
-		branch, err := a.runQuietIn(cloneDir, "git", "branch", "--show-current")
+		branch, err := a.runQuietInWithEnv(cloneDir, commandEnvironment, "git", "branch", "--show-current")
 		if err != nil || strings.TrimSpace(branch) == "" {
 			a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
 			return fmt.Errorf("无法识别源仓库默认分支")
 		}
-		if err = a.runCommandIn(repo.ID, cloneDir, "git", "push", "--force", repo.Target.CloneURL, "HEAD:refs/heads/"+strings.TrimSpace(branch)); err != nil {
+		if err = a.runCommandInWithEnv(repo.ID, cloneDir, commandEnvironment, "git", "push", "--force", repo.Target.CloneURL, "HEAD:refs/heads/"+strings.TrimSpace(branch)); err != nil {
 			a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
 			return fmt.Errorf("推送目标仓库失败: %w", err)
 		}
-	} else if err := a.runCommandIn(repo.ID, cloneDir, "git", "push", "--force", "--prune", repo.Target.CloneURL, "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"); err != nil {
+	} else if err := a.runCommandInWithEnv(repo.ID, cloneDir, commandEnvironment, "git", "push", "--force", "--prune", repo.Target.CloneURL, "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"); err != nil {
 		a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
 		return fmt.Errorf("推送目标仓库失败: %w", err)
 	}
@@ -45,10 +46,10 @@ func (a *App) performSync(repo Repository, syncLFS bool, environment Environment
 			a.emitLog(repo.ID, "warning", "未安装 Git LFS，已跳过大文件对象")
 		} else {
 			a.emitLog(repo.ID, "info", "正在同步 Git LFS 对象")
-			if err := a.runCommandIn(repo.ID, cloneDir, "git", "lfs", "fetch", "--all", repo.Source.CloneURL); err != nil {
+			if err := a.runCommandInWithEnv(repo.ID, cloneDir, commandEnvironment, "git", "lfs", "fetch", "--all", repo.Source.CloneURL); err != nil {
 				return fmt.Errorf("Git LFS 拉取失败: %w", err)
 			}
-			if err := a.runCommandIn(repo.ID, cloneDir, "git", "lfs", "push", "--all", repo.Target.CloneURL); err != nil {
+			if err := a.runCommandInWithEnv(repo.ID, cloneDir, commandEnvironment, "git", "lfs", "push", "--all", repo.Target.CloneURL); err != nil {
 				return fmt.Errorf("Git LFS 推送失败: %w", err)
 			}
 		}

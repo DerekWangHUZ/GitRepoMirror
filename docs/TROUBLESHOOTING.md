@@ -23,7 +23,19 @@ glab auth login --hostname gitlab.com --device --git-protocol https
 
 ## GitLab 返回 HTTP Basic: Access denied
 
-Windows Credential Manager 中可能仍有过期的 HTTPS 凭据。重新运行 `glab auth login` 并选择让 GitLab CLI 配置 Git 凭据，然后再次检查目标仓库访问权限。
+最新版应用会在 GitLab HTTPS 操作中复用 `glab auth git-credential`，不会要求再登录一个独立的 GitLab 连接。先确认：
+
+```powershell
+glab auth status --hostname gitlab.com
+```
+
+如果仍返回 401/403，请检查目标仓库是否属于当前账号、是否被安排删除，以及分支保护规则。不要把 token 写入仓库 URL 或提交到配置文件。
+
+## GitLab 推送时显示 `You are not allowed to push code to this project`
+
+这通常不是 CLI 登录失败。若目标项目的 API 信息包含 `marked_for_deletion_at` 或项目名称带有 `deletion_scheduled`，GitLab 会拒绝推送，即使当前账号仍是项目所有者。请在 GitLab 页面撤销删除计划，或换用一个新的目标仓库名称。
+
+应用日志中的 `Cannot prompt because user interactivity has been disabled` 是后台任务拒绝弹出凭据窗口的提示；应结合前面的 HTTP 状态和远端错误判断真正原因。
 
 ## 目标仓库已经存在
 

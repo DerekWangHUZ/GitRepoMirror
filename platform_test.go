@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"os"
 	"reflect"
 	"testing"
 )
@@ -67,6 +68,73 @@ func TestRedactArgs(t *testing.T) {
 	redacted := redactArgs([]string{"push", "https://user:token@example.com/team/repo.git"})
 	if redacted[1] != "https://%2A%2A%2A@example.com/team/repo.git" {
 		t.Fatalf("credential was not redacted: %q", redacted[1])
+	}
+}
+
+func TestGitLabCredentialEnvironmentUsesGlabHelper(t *testing.T) {
+	base := []string{
+		"Path=C:\\Windows",
+		"GCM_INTERACTIVE=Always",
+		"GIT_CONFIG_COUNT=3",
+		"GIT_CONFIG_KEY_0=credential.helper",
+		"GIT_CONFIG_VALUE_0=manager",
+	}
+	environment := withGitLabCredentialHelper(base, "C:\\Program Files\\glab")
+	if got := environmentValue(environment, "GIT_CONFIG_COUNT"); got != "1" {
+		t.Fatalf("unexpected config count: %q", got)
+	}
+	if got := environmentValue(environment, "GIT_CONFIG_KEY_0"); got != "credential.https://gitlab.com.helper" {
+		t.Fatalf("unexpected config key: %q", got)
+	}
+	if got := environmentValue(environment, "GIT_CONFIG_VALUE_0"); got != "!glab auth git-credential" {
+		t.Fatalf("unexpected config helper: %q", got)
+	}
+	if got := environmentValue(environment, "PATH"); got != "C:\\Program Files\\glab"+string(os.PathListSeparator)+"C:\\Windows" {
+		t.Fatalf("glab directory was not added to PATH: %q", got)
+	}
+	if got := environmentValue(environment, "GCM_INTERACTIVE"); got != "Always" {
+		t.Fatalf("unrelated environment value changed: %q", got)
+	}
+}
+
+func TestUsesGitLabHTTPSOnlyForGitLabHTTPSRemotes(t *testing.T) {
+	tests := []struct {
+		name   string
+		remote RemoteSpec
+		want   bool
+	}{
+		{
+			name:   "gitlab https",
+			remote: RemoteSpec{Platform: PlatformGitLab, CloneURL: "https://gitlab.com/team/repo.git"},
+			want:   true,
+		},
+		{
+			name:   "gitlab ssh",
+			remote: RemoteSpec{Platform: PlatformGitLab, CloneURL: "ssh://git@gitlab.com/team/repo.git"},
+			want:   false,
+		},
+		{
+			name:   "github https",
+			remote: RemoteSpec{Platform: PlatformGitHub, CloneURL: "https://github.com/team/repo.git"},
+			want:   false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := usesGitLabHTTPS(test.remote); got != test.want {
+				t.Fatalf("usesGitLabHTTPS(%#v) = %v, want %v", test.remote, got, test.want)
+			}
+		})
+	}
+}
+
+func TestCommandEnvDisablesInteractiveCredentialPrompts(t *testing.T) {
+	app := NewApp()
+	if got := environmentValue(app.commandEnv(), "GIT_TERMINAL_PROMPT"); got != "0" {
+		t.Fatalf("unexpected terminal prompt setting: %q", got)
+	}
+	if got := environmentValue(app.commandEnv(), "GCM_INTERACTIVE"); got != "Never" {
+		t.Fatalf("unexpected credential manager setting: %q", got)
 	}
 }
 
