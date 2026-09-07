@@ -153,9 +153,11 @@ func usesGitLabHTTPS(remote RemoteSpec) bool {
 
 func withGitLabCredentialHelper(environment []string, glabDir string) []string {
 	overrides := map[string]string{
-		"GIT_CONFIG_COUNT":   "1",
-		"GIT_CONFIG_KEY_0":   "credential.https://gitlab.com.helper",
-		"GIT_CONFIG_VALUE_0": "!glab auth git-credential",
+		"GIT_CONFIG_COUNT":   "2",
+		"GIT_CONFIG_KEY_0":   "credential.helper",
+		"GIT_CONFIG_VALUE_0": "",
+		"GIT_CONFIG_KEY_1":   "credential.https://gitlab.com.helper",
+		"GIT_CONFIG_VALUE_1": "!glab auth git-credential",
 	}
 	if glabDir != "" && glabDir != "." {
 		path := environmentValue(environment, "PATH")

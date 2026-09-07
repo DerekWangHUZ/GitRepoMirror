@@ -80,13 +80,19 @@ func TestGitLabCredentialEnvironmentUsesGlabHelper(t *testing.T) {
 		"GIT_CONFIG_VALUE_0=manager",
 	}
 	environment := withGitLabCredentialHelper(base, "C:\\Program Files\\glab")
-	if got := environmentValue(environment, "GIT_CONFIG_COUNT"); got != "1" {
+	if got := environmentValue(environment, "GIT_CONFIG_COUNT"); got != "2" {
 		t.Fatalf("unexpected config count: %q", got)
 	}
-	if got := environmentValue(environment, "GIT_CONFIG_KEY_0"); got != "credential.https://gitlab.com.helper" {
+	if got := environmentValue(environment, "GIT_CONFIG_KEY_0"); got != "credential.helper" {
+		t.Fatalf("unexpected reset helper key: %q", got)
+	}
+	if got := environmentValue(environment, "GIT_CONFIG_VALUE_0"); got != "" {
+		t.Fatalf("unexpected reset helper value: %q", got)
+	}
+	if got := environmentValue(environment, "GIT_CONFIG_KEY_1"); got != "credential.https://gitlab.com.helper" {
 		t.Fatalf("unexpected config key: %q", got)
 	}
-	if got := environmentValue(environment, "GIT_CONFIG_VALUE_0"); got != "!glab auth git-credential" {
+	if got := environmentValue(environment, "GIT_CONFIG_VALUE_1"); got != "!glab auth git-credential" {
 		t.Fatalf("unexpected config helper: %q", got)
 	}
 	if got := environmentValue(environment, "PATH"); got != "C:\\Program Files\\glab"+string(os.PathListSeparator)+"C:\\Windows" {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,23 +28,45 @@ func (a *App) performSync(repo Repository, syncLFS bool, environment Environment
 	}
 	a.emitProgress(repo.ID, 2, "拉取源仓库", "done")
 	a.emitProgress(repo.ID, 3, "推送目标仓库", "running")
+	branches := []string(nil)
 	if repo.Mode == "shallow" {
 		branch, err := a.runQuietInWithEnv(cloneDir, commandEnvironment, "git", "branch", "--show-current")
 		if err != nil || strings.TrimSpace(branch) == "" {
 			a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
 			return fmt.Errorf("无法识别源仓库默认分支")
 		}
-		push := shallowPushCommand(repo.Target, strings.TrimSpace(branch))
-		if err = a.runCommandInWithEnv(repo.ID, cloneDir, commandEnvironment, push.Name, push.Args...); err != nil {
+		branches = []string{strings.TrimSpace(branch)}
+	} else if repo.Target.Platform == PlatformGitLab && repo.ManagementMode == ManagementCLI {
+		var err error
+		branches, err = localBranches(cloneDir, commandEnvironment, a)
+		if err != nil {
 			a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
-			return fmt.Errorf("推送目标仓库失败: %w", err)
+			return fmt.Errorf("无法读取源仓库分支: %w", err)
 		}
+	}
+	restoreProtection, force, err := a.prepareGitLabForcePush(repo, branches)
+	if err != nil {
+		a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
+		return err
+	}
+	var push commandSpec
+	if repo.Mode == "shallow" {
+		push = shallowPushCommand(repo.Target, branches[0], force)
 	} else {
-		push := mirrorPushCommand(repo.Target)
-		if err := a.runCommandInWithEnv(repo.ID, cloneDir, commandEnvironment, push.Name, push.Args...); err != nil {
-			a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
-			return fmt.Errorf("推送目标仓库失败: %w", err)
+		push = mirrorPushCommand(repo.Target, force)
+	}
+	pushErr := a.runCommandInWithEnv(repo.ID, cloneDir, commandEnvironment, push.Name, push.Args...)
+	restoreErr := restoreProtection()
+	if pushErr != nil {
+		a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
+		if restoreErr != nil {
+			return errors.Join(fmt.Errorf("推送目标仓库失败: %w", pushErr), fmt.Errorf("恢复 GitLab 分支保护失败: %w", restoreErr))
 		}
+		return fmt.Errorf("推送目标仓库失败: %w", pushErr)
+	}
+	if restoreErr != nil {
+		a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
+		return fmt.Errorf("恢复 GitLab 分支保护失败: %w", restoreErr)
 	}
 	if syncLFS {
 		if _, err := findExecutable("git-lfs"); err != nil {
@@ -63,14 +86,101 @@ func (a *App) performSync(repo Repository, syncLFS bool, environment Environment
 	return nil
 }
 
-// GitLab commonly protects the default branch and rejects a push that asks for
-// force-updating it, even when the source and target are otherwise writable.
-// Use a fast-forward-only push there so a newly-created target (and normal
-// subsequent syncs) can be mirrored without requiring users to weaken branch
-// protection. GitHub and generic Git remotes retain the documented force-mirror
-// behavior.
-func mirrorPushCommand(target RemoteSpec) commandSpec {
-	force := target.Platform != PlatformGitLab
+func (a *App) prepareGitLabForcePush(repo Repository, branches []string) (func() error, bool, error) {
+	noop := func() error { return nil }
+	if repo.Target.Platform != PlatformGitLab || repo.ManagementMode != ManagementCLI {
+		return noop, repo.Target.Platform != PlatformGitLab, nil
+	}
+	fullName := strings.Trim(strings.TrimSpace(repo.Target.Namespace), "/") + "/" + strings.TrimSpace(repo.Target.Repository)
+	rules, err := a.fetchGitLabProtectedBranches(fullName)
+	if err != nil {
+		a.emitLog(repo.ID, "warning", "无法读取 GitLab 分支保护规则，改用非强制推送: "+err.Error())
+		return noop, false, nil
+	}
+	var changed []string
+	for _, rule := range rules {
+		if rule.AllowForcePush || !protectedBranchRuleMatchesAny(rule.Name, branches) {
+			continue
+		}
+		if err := a.setGitLabProtectedBranchForcePush(fullName, rule.Name, true); err != nil {
+			restoreErr := restoreGitLabForcePush(a, repo.ID, fullName, changed)
+			if restoreErr != nil {
+				return noop, false, errors.Join(
+					fmt.Errorf("无法为 GitLab 保护分支 %q 临时允许强制推送: %w", rule.Name, err),
+					fmt.Errorf("恢复 GitLab 分支保护失败: %w", restoreErr),
+				)
+			}
+			return noop, false, fmt.Errorf("无法为 GitLab 保护分支 %q 临时允许强制推送，请确认当前账号有管理分支保护权限: %w", rule.Name, err)
+		}
+		changed = append(changed, rule.Name)
+	}
+	if len(changed) > 0 {
+		a.emitLog(repo.ID, "info", "已临时允许 GitLab 保护分支强制推送，镜像完成后自动恢复")
+	}
+	return func() error {
+		return restoreGitLabForcePush(a, repo.ID, fullName, changed)
+	}, true, nil
+}
+
+func restoreGitLabForcePush(app *App, repositoryID, fullName string, branches []string) error {
+	var restoreErr error
+	for index := len(branches) - 1; index >= 0; index-- {
+		branch := branches[index]
+		if err := app.setGitLabProtectedBranchForcePush(fullName, branch, false); err != nil {
+			restoreErr = errors.Join(restoreErr, fmt.Errorf("%s: %w", branch, err))
+			continue
+		}
+	}
+	if restoreErr == nil && len(branches) > 0 {
+		app.emitLog(repositoryID, "info", "GitLab 分支保护已恢复")
+	}
+	return restoreErr
+}
+
+func localBranches(cloneDir string, environment []string, app *App) ([]string, error) {
+	output, err := app.runQuietInWithEnv(cloneDir, environment, "git", "for-each-ref", "--format=%(refname:strip=2)", "refs/heads")
+	if err != nil {
+		return nil, err
+	}
+	var branches []string
+	for _, branch := range strings.Split(output, "\n") {
+		if branch = strings.TrimSpace(branch); branch != "" {
+			branches = append(branches, branch)
+		}
+	}
+	return branches, nil
+}
+
+func protectedBranchRuleMatchesAny(rule string, branches []string) bool {
+	for _, branch := range branches {
+		if protectedBranchRuleMatches(rule, branch) {
+			return true
+		}
+	}
+	return false
+}
+
+func protectedBranchRuleMatches(rule, branch string) bool {
+	if !strings.Contains(rule, "*") {
+		return rule == branch
+	}
+	parts := strings.Split(rule, "*")
+	if !strings.HasPrefix(branch, parts[0]) {
+		return false
+	}
+	branch = strings.TrimPrefix(branch, parts[0])
+	for _, part := range parts[1:] {
+		index := strings.Index(branch, part)
+		if index < 0 {
+			return false
+		}
+		branch = branch[index+len(part):]
+	}
+	return true
+}
+
+func mirrorPushCommand(target RemoteSpec, force bool) commandSpec {
+	force = force || target.Platform != PlatformGitLab
 	args := []string{"push"}
 	if force {
 		args = append(args, "--force")
@@ -83,9 +193,10 @@ func mirrorPushCommand(target RemoteSpec) commandSpec {
 	return commandSpec{Name: "git", Args: append(args, heads, tags)}
 }
 
-func shallowPushCommand(target RemoteSpec, branch string) commandSpec {
+func shallowPushCommand(target RemoteSpec, branch string, force bool) commandSpec {
+	force = force || target.Platform != PlatformGitLab
 	args := []string{"push"}
-	if target.Platform != PlatformGitLab {
+	if force {
 		args = append(args, "--force")
 	}
 	args = append(args, target.CloneURL, "HEAD:refs/heads/"+branch)

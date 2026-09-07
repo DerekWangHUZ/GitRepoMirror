@@ -23,7 +23,7 @@ glab auth login --hostname gitlab.com --device --git-protocol https
 
 ## GitLab 返回 HTTP Basic: Access denied
 
-最新版应用会在 GitLab HTTPS 操作中复用 `glab auth git-credential`，不会要求再登录一个独立的 GitLab 连接。先确认：
+最新版应用会在 GitLab HTTPS 操作中复用 `glab auth git-credential`，并临时屏蔽系统中可能保存旧凭据的其他 Git helper，不会要求再登录一个独立的 GitLab 连接。先确认：
 
 ```powershell
 glab auth status --hostname gitlab.com
@@ -43,7 +43,7 @@ glab auth status --hostname gitlab.com
 
 ## GitLab 受保护分支拒绝强制推送
 
-GitLab 目标使用非强制推送，以兼容默认的受保护分支。新建目标或源端历史正常向前推进时可以直接同步；如果目标端已有独立提交、源端发生过历史重写，非快进更新会被 GitLab 拒绝。此时请清空目标仓库，或允许当前账号对目标分支执行强制推送后再重试。
+GitLab CLI 管理的目标会在完整镜像期间临时允许匹配保护规则的强制推送，推送完成后自动恢复原设置。若提示没有权限修改保护分支，当前账号需要具备项目的分支保护管理权限；也可以在 GitLab 中手动允许强制推送后重试。仅使用完整 Git URL 的 GitLab 目标不会修改平台设置，只支持非强制更新，因此目标存在独立提交或源端发生历史重写时，需要先清理目标或手动调整保护策略。
 
 ## 无法访问源仓库
 
