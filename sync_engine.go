@@ -33,13 +33,17 @@ func (a *App) performSync(repo Repository, syncLFS bool, environment Environment
 			a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
 			return fmt.Errorf("无法识别源仓库默认分支")
 		}
-		if err = a.runCommandInWithEnv(repo.ID, cloneDir, commandEnvironment, "git", "push", "--force", repo.Target.CloneURL, "HEAD:refs/heads/"+strings.TrimSpace(branch)); err != nil {
+		push := shallowPushCommand(repo.Target, strings.TrimSpace(branch))
+		if err = a.runCommandInWithEnv(repo.ID, cloneDir, commandEnvironment, push.Name, push.Args...); err != nil {
 			a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
 			return fmt.Errorf("推送目标仓库失败: %w", err)
 		}
-	} else if err := a.runCommandInWithEnv(repo.ID, cloneDir, commandEnvironment, "git", "push", "--force", "--prune", repo.Target.CloneURL, "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"); err != nil {
-		a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
-		return fmt.Errorf("推送目标仓库失败: %w", err)
+	} else {
+		push := mirrorPushCommand(repo.Target)
+		if err := a.runCommandInWithEnv(repo.ID, cloneDir, commandEnvironment, push.Name, push.Args...); err != nil {
+			a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
+			return fmt.Errorf("推送目标仓库失败: %w", err)
+		}
 	}
 	if syncLFS {
 		if _, err := findExecutable("git-lfs"); err != nil {
@@ -57,4 +61,33 @@ func (a *App) performSync(repo Repository, syncLFS bool, environment Environment
 	a.emitProgress(repo.ID, 3, "推送目标仓库", "done")
 	a.emitProgress(repo.ID, 4, "清理临时文件", "done")
 	return nil
+}
+
+// GitLab commonly protects the default branch and rejects a push that asks for
+// force-updating it, even when the source and target are otherwise writable.
+// Use a fast-forward-only push there so a newly-created target (and normal
+// subsequent syncs) can be mirrored without requiring users to weaken branch
+// protection. GitHub and generic Git remotes retain the documented force-mirror
+// behavior.
+func mirrorPushCommand(target RemoteSpec) commandSpec {
+	force := target.Platform != PlatformGitLab
+	args := []string{"push"}
+	if force {
+		args = append(args, "--force")
+	}
+	args = append(args, "--prune", target.CloneURL)
+	heads, tags := "refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"
+	if force {
+		heads, tags = "+"+heads, "+"+tags
+	}
+	return commandSpec{Name: "git", Args: append(args, heads, tags)}
+}
+
+func shallowPushCommand(target RemoteSpec, branch string) commandSpec {
+	args := []string{"push"}
+	if target.Platform != PlatformGitLab {
+		args = append(args, "--force")
+	}
+	args = append(args, target.CloneURL, "HEAD:refs/heads/"+branch)
+	return commandSpec{Name: "git", Args: args}
 }
