@@ -19,6 +19,11 @@ type gitLabProject struct {
 	WebURL        string `json:"web_url"`
 }
 
+type gitLabProtectedBranch struct {
+	Name           string `json:"name"`
+	AllowForcePush bool   `json:"allow_force_push"`
+}
+
 func platformCLI(platform string) string {
 	switch platform {
 	case PlatformGitHub:
@@ -117,6 +122,26 @@ func (a *App) fetchGitLabProject(fullName string) (gitLabProject, string, error)
 		return gitLabProject{}, output, fmt.Errorf("GitLab 返回的项目信息不完整")
 	}
 	return project, output, nil
+}
+
+func (a *App) fetchGitLabProtectedBranches(fullName string) ([]gitLabProtectedBranch, error) {
+	output, err := a.runQuiet("glab", "api", "projects/"+url.PathEscape(fullName)+"/protected_branches?per_page=100")
+	if err != nil {
+		return nil, err
+	}
+	var branches []gitLabProtectedBranch
+	if err := json.Unmarshal([]byte(output), &branches); err != nil {
+		return nil, fmt.Errorf("GitLab 返回的保护分支信息格式无效: %w", err)
+	}
+	return branches, nil
+}
+
+func (a *App) setGitLabProtectedBranchForcePush(fullName, branch string, allowed bool) error {
+	endpoint := "projects/" + url.PathEscape(fullName) + "/protected_branches/" + url.PathEscape(branch) + "?allow_force_push=" + strconv.FormatBool(allowed)
+	if _, err := a.runQuiet("glab", "api", "--method", "PATCH", endpoint); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (a *App) createManagedRepository(id, platform, fullName, visibility string) error {
