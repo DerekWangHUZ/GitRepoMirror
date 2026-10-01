@@ -10,30 +10,45 @@ func TestMirrorPushCommandForceModes(t *testing.T) {
 		name   string
 		target RemoteSpec
 		force  bool
+		prune  bool
 		want   []string
 	}{
 		{
 			name:   "GitLab fallback without API permission",
 			target: RemoteSpec{Platform: PlatformGitLab, CloneURL: "https://gitlab.com/team/backup.git"},
 			force:  false,
-			want:   []string{"push", "--prune", "https://gitlab.com/team/backup.git", "refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
+			want:   []string{"push", "https://gitlab.com/team/backup.git", "refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
 		},
 		{
 			name:   "GitLab full mirror after temporary permission",
 			target: RemoteSpec{Platform: PlatformGitLab, CloneURL: "https://gitlab.com/team/backup.git"},
 			force:  true,
-			want:   []string{"push", "--force", "--prune", "https://gitlab.com/team/backup.git", "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"},
+			want:   []string{"push", "--force", "https://gitlab.com/team/backup.git", "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"},
 		},
 		{
 			name:   "GitHub keeps force mirror",
 			target: RemoteSpec{Platform: PlatformGitHub, CloneURL: "https://github.com/team/backup.git"},
 			force:  false,
+			want:   []string{"push", "--force", "https://github.com/team/backup.git", "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"},
+		},
+		{
+			name:   "GitLab strict mirror prunes extra refs",
+			target: RemoteSpec{Platform: PlatformGitLab, CloneURL: "https://gitlab.com/team/backup.git"},
+			force:  false,
+			prune:  true,
+			want:   []string{"push", "--prune", "https://gitlab.com/team/backup.git", "refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
+		},
+		{
+			name:   "GitHub strict mirror forces and prunes",
+			target: RemoteSpec{Platform: PlatformGitHub, CloneURL: "https://github.com/team/backup.git"},
+			force:  false,
+			prune:  true,
 			want:   []string{"push", "--force", "--prune", "https://github.com/team/backup.git", "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := mirrorPushCommand(test.target, test.force)
+			got := mirrorPushCommand(test.target, test.force, test.prune)
 			if got.Name != "git" || !reflect.DeepEqual(got.Args, test.want) {
 				t.Fatalf("mirrorPushCommand(%#v) = %#v, want %#v", test.target, got, test.want)
 			}

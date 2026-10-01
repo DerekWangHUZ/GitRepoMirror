@@ -112,5 +112,12 @@ describe("UI contracts", () => {
     expect(html).toContain("http://127.0.0.1:7890");
     expect(html).toContain("<option selected>3</option>");
     expect(html).toContain('name="syncLfs" checked');
+    expect(html).toContain('name="pruneTargetRefs"');
+    expect(html).not.toContain('name="pruneTargetRefs" checked');
+  });
+
+  it("marks prune target refs as enabled when the setting is on", () => {
+    const html = settingsView({ pruneTargetRefs: true });
+    expect(html).toContain('name="pruneTargetRefs" checked');
   });
 });

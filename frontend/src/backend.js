@@ -43,6 +43,7 @@ const preview = {
     settings: {
       concurrency: 2,
       syncLfs: false,
+      pruneTargetRefs: false,
       proxy: "",
       prefix: "",
       suffix: "",

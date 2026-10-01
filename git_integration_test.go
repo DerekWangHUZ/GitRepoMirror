@@ -35,6 +35,28 @@ func TestMirrorSyncWithLocalGitRepositories(t *testing.T) {
 	if !strings.Contains(output, "refs/heads/") {
 		t.Fatalf("target repository has no mirrored branch: %s", output)
 	}
+
+	// A branch pushed manually to the target must survive a default sync.
+	runGitTestCommand(t, git, root, "--git-dir", target, "branch", "manual-branch", "HEAD")
+	if err := app.performSync(repository, false, EnvironmentStatus{}); err != nil {
+		t.Fatal(err)
+	}
+	output = runGitTestCommand(t, git, root, "--git-dir", target, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if !strings.Contains(output, "manual-branch") {
+		t.Fatalf("manual target branch was deleted by default sync: %s", output)
+	}
+
+	// Strict mirror mode must remove it again.
+	data := app.store.Snapshot()
+	data.Settings.PruneTargetRefs = true
+	app.store.Replace(data)
+	if err := app.performSync(repository, false, EnvironmentStatus{}); err != nil {
+		t.Fatal(err)
+	}
+	output = runGitTestCommand(t, git, root, "--git-dir", target, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if strings.Contains(output, "manual-branch") {
+		t.Fatalf("strict mirror sync kept the manual target branch: %s", output)
+	}
 }
 
 func runGitTestCommand(t *testing.T, git, dir string, args ...string) string {
