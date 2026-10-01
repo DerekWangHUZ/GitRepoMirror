@@ -27,6 +27,10 @@ type Settings struct {
 	Suffix      string `json:"suffix"`
 	Concurrency int    `json:"concurrency"`
 	SyncLFS     bool   `json:"syncLfs"`
+	// PruneTargetRefs controls whether full mirror syncs delete branches and
+	// tags that exist on the target but not on the source. It defaults to
+	// false so manually pushed target branches survive a sync.
+	PruneTargetRefs bool `json:"pruneTargetRefs"`
 }
 
 type Repository struct {

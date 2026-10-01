@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"reflect"
+	"slices"
 	"sync"
 	"testing"
 )
@@ -36,8 +37,12 @@ func TestSyncEngineEmitsStableProgressContract(t *testing.T) {
 	app := NewApp()
 	events := &recordingEventSink{}
 	app.events = events
+	var commands [][]string
 	app.quietHook = func(_ string, _ string, _ ...string) (string, error) { return "", nil }
-	app.commandHook = func(_ string, _ string, _ string, _ ...string) error { return nil }
+	app.commandHook = func(_ string, _ string, name string, args ...string) error {
+		commands = append(commands, append([]string{name}, args...))
+		return nil
+	}
 	repo := Repository{
 		ID: "progress", Mode: "mirror",
 		Source: RemoteSpec{Platform: PlatformGeneric, CloneURL: "https://code.example/source.git"},
@@ -54,6 +59,32 @@ func TestSyncEngineEmitsStableProgressContract(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected progress contract: %#v", got)
 	}
+	push := pushCommandArgs(commands)
+	if push == nil {
+		t.Fatalf("push command was not recorded: %#v", commands)
+	}
+	if slices.Contains(push, "--prune") {
+		t.Fatalf("default sync must not prune target refs: %#v", push)
+	}
+	data := app.store.Snapshot()
+	data.Settings.PruneTargetRefs = true
+	app.store.Replace(data)
+	if err := app.performSync(repo, false, EnvironmentStatus{}); err != nil {
+		t.Fatal(err)
+	}
+	push = pushCommandArgs(commands[len(commands)-1:])
+	if push == nil || !slices.Contains(push, "--prune") {
+		t.Fatalf("prune-enabled sync must pass --prune: %#v", push)
+	}
+}
+
+func pushCommandArgs(commands [][]string) []string {
+	for _, command := range commands {
+		if command[0] == "git" && command[1] == "push" {
+			return command
+		}
+	}
+	return nil
 }
 
 func TestSyncEngineMarksCloneFailure(t *testing.T) {

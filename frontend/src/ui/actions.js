@@ -164,6 +164,7 @@ export function createActions(state, backend, renderer) {
     const settings = Object.fromEntries(new FormData(form).entries());
     settings.concurrency = Number(settings.concurrency);
     settings.syncLfs = form.syncLfs.checked;
+    settings.pruneTargetRefs = form.pruneTargetRefs.checked;
     try {
       await backend.SaveSettings(settings);
       toast("设置已保存", "success");

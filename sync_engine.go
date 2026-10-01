@@ -53,7 +53,7 @@ func (a *App) performSync(repo Repository, syncLFS bool, environment Environment
 	if repo.Mode == "shallow" {
 		push = shallowPushCommand(repo.Target, branches[0], force)
 	} else {
-		push = mirrorPushCommand(repo.Target, force)
+		push = mirrorPushCommand(repo.Target, force, a.store.Settings().PruneTargetRefs)
 	}
 	pushErr := a.runCommandInWithEnv(repo.ID, cloneDir, commandEnvironment, push.Name, push.Args...)
 	restoreErr := restoreProtection()
@@ -179,13 +179,16 @@ func protectedBranchRuleMatches(rule, branch string) bool {
 	return true
 }
 
-func mirrorPushCommand(target RemoteSpec, force bool) commandSpec {
+func mirrorPushCommand(target RemoteSpec, force, prune bool) commandSpec {
 	force = force || target.Platform != PlatformGitLab
 	args := []string{"push"}
 	if force {
 		args = append(args, "--force")
 	}
-	args = append(args, "--prune", target.CloneURL)
+	if prune {
+		args = append(args, "--prune")
+	}
+	args = append(args, target.CloneURL)
 	heads, tags := "refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"
 	if force {
 		heads, tags = "+"+heads, "+"+tags
