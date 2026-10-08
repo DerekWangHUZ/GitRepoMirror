@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -40,13 +42,32 @@ func (a *App) commandEnvForRemotes(remotes ...RemoteSpec) []string {
 		if !usesGitLabHTTPS(remote) {
 			continue
 		}
-		glabPath, err := findExecutable("glab")
+		glabPath, err := a.resolveExecutable("glab")
 		if err != nil {
 			return environment
 		}
-		return withGitLabCredentialHelper(environment, filepath.Dir(glabPath))
+		return withGitLabCredentialHelper(environment, filepath.Dir(glabPath), a.executableDir("gh"))
 	}
 	return environment
+}
+
+// resolveExecutable honours the test hook and otherwise falls back to the
+// package lookup that also probes the well-known Windows install directories.
+func (a *App) resolveExecutable(name string) (string, error) {
+	if a.executableHook != nil {
+		return a.executableHook(name)
+	}
+	return findExecutable(name)
+}
+
+// executableDir returns the directory holding the tool, or "" when the tool is
+// not installed so callers can keep the behaviour of a missing CLI.
+func (a *App) executableDir(name string) string {
+	path, err := a.resolveExecutable(name)
+	if err != nil {
+		return ""
+	}
+	return filepath.Dir(path)
 }
 
 func (a *App) runQuiet(name string, args ...string) (string, error) {
@@ -151,23 +172,75 @@ func usesGitLabHTTPS(remote RemoteSpec) bool {
 	return err == nil && strings.EqualFold(u.Scheme, "https") && strings.EqualFold(u.Hostname(), "gitlab.com")
 }
 
-func withGitLabCredentialHelper(environment []string, glabDir string) []string {
-	overrides := map[string]string{
-		"GIT_CONFIG_COUNT":   "2",
-		"GIT_CONFIG_KEY_0":   "credential.helper",
-		"GIT_CONFIG_VALUE_0": "",
-		"GIT_CONFIG_KEY_1":   "credential.https://gitlab.com.helper",
-		"GIT_CONFIG_VALUE_1": "!glab auth git-credential",
+// withGitLabCredentialHelper builds the environment shared by the clone and the
+// push of one sync. The empty credential.helper entry resets every helper the
+// system and the global git config provide, so GitHub needs its own helper as
+// well: without it the follow-up push finds no helper at all while
+// GIT_TERMINAL_PROMPT=0 has disabled the interactive prompt.
+func withGitLabCredentialHelper(environment []string, glabDir, ghDir string) []string {
+	entries := [][2]string{
+		{"credential.helper", ""},
+		{"credential.https://gitlab.com.helper", "!glab auth git-credential"},
 	}
-	if glabDir != "" && glabDir != "." {
-		path := environmentValue(environment, "PATH")
-		if path == "" {
-			overrides["PATH"] = glabDir
-		} else {
-			overrides["PATH"] = glabDir + string(os.PathListSeparator) + path
-		}
+	if ghDir != "" {
+		entries = append(entries, [2]string{"credential.https://github.com.helper", "!gh auth git-credential"})
+	}
+	environment = dropGitConfigOverrides(environment)
+	overrides := make(map[string]string, 2*len(entries)+1)
+	overrides["GIT_CONFIG_COUNT"] = strconv.Itoa(len(entries))
+	for index, entry := range entries {
+		overrides[fmt.Sprintf("GIT_CONFIG_KEY_%d", index)] = entry[0]
+		overrides[fmt.Sprintf("GIT_CONFIG_VALUE_%d", index)] = entry[1]
+	}
+	if path, added := pathWithLeadingDirectories(environment, glabDir, ghDir); added {
+		overrides["PATH"] = path
 	}
 	return replaceCommandEnv(environment, overrides)
+}
+
+// dropGitConfigOverrides removes GIT_CONFIG_COUNT together with any inherited
+// GIT_CONFIG_KEY_n/GIT_CONFIG_VALUE_n pair, so the count always describes the
+// pairs written by withGitLabCredentialHelper.
+func dropGitConfigOverrides(environment []string) []string {
+	result := make([]string, 0, len(environment))
+	for _, entry := range environment {
+		if key, _, ok := strings.Cut(entry, "="); ok && isGitConfigEntry(key) {
+			continue
+		}
+		result = append(result, entry)
+	}
+	return result
+}
+
+func isGitConfigEntry(key string) bool {
+	name := strings.ToUpper(key)
+	return name == "GIT_CONFIG_COUNT" ||
+		strings.HasPrefix(name, "GIT_CONFIG_KEY_") ||
+		strings.HasPrefix(name, "GIT_CONFIG_VALUE_")
+}
+
+// pathWithLeadingDirectories returns PATH with the given directories in front
+// and reports whether anything was prepended. Directories already on PATH are
+// skipped so repeated syncs do not keep growing the variable.
+func pathWithLeadingDirectories(environment []string, dirs ...string) (string, bool) {
+	separator := string(os.PathListSeparator)
+	existing := environmentValue(environment, "PATH")
+	present := strings.Split(existing, separator)
+	var leading []string
+	for _, dir := range dirs {
+		if dir == "" || dir == "." || slices.Contains(present, dir) {
+			continue
+		}
+		leading = append(leading, dir)
+		present = append(present, dir)
+	}
+	if len(leading) == 0 {
+		return existing, false
+	}
+	if existing == "" {
+		return strings.Join(leading, separator), true
+	}
+	return strings.Join(leading, separator) + separator + existing, true
 }
 
 func replaceCommandEnv(environment []string, overrides map[string]string) []string {

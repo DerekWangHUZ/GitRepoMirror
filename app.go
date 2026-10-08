@@ -11,14 +11,15 @@ import (
 // App is the stable Wails-facing facade. Business operations live in focused
 // service modules; these methods remain here to preserve the generated API.
 type App struct {
-	ctx         context.Context
-	store       *RepositoryStore
-	quietHook   func(dir, name string, args ...string) (string, error)
-	commandHook func(id, dir, name string, args ...string) error
-	events      EventSink
-	operations  *operationRegistry
-	pendingMu   sync.Mutex
-	pendingLogs []LogEvent
+	ctx            context.Context
+	store          *RepositoryStore
+	quietHook      func(dir, name string, args ...string) (string, error)
+	commandHook    func(id, dir, name string, args ...string) error
+	executableHook func(name string) (string, error)
+	events         EventSink
+	operations     *operationRegistry
+	pendingMu      sync.Mutex
+	pendingLogs    []LogEvent
 }
 
 func NewApp() *App {

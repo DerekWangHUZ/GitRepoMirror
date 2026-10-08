@@ -2,8 +2,13 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"reflect"
+	"slices"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -75,12 +80,14 @@ func TestGitLabCredentialEnvironmentUsesGlabHelper(t *testing.T) {
 	base := []string{
 		"Path=C:\\Windows",
 		"GCM_INTERACTIVE=Always",
-		"GIT_CONFIG_COUNT=3",
+		"GIT_CONFIG_COUNT=4",
 		"GIT_CONFIG_KEY_0=credential.helper",
 		"GIT_CONFIG_VALUE_0=manager",
+		"GIT_CONFIG_KEY_3=credential.https://example.invalid.helper",
+		"GIT_CONFIG_VALUE_3=!stale helper",
 	}
-	environment := withGitLabCredentialHelper(base, "C:\\Program Files\\glab")
-	if got := environmentValue(environment, "GIT_CONFIG_COUNT"); got != "2" {
+	environment := withGitLabCredentialHelper(base, "C:\\Program Files\\glab", "C:\\Program Files\\GitHub CLI")
+	if got := environmentValue(environment, "GIT_CONFIG_COUNT"); got != "3" {
 		t.Fatalf("unexpected config count: %q", got)
 	}
 	if got := environmentValue(environment, "GIT_CONFIG_KEY_0"); got != "credential.helper" {
@@ -95,12 +102,176 @@ func TestGitLabCredentialEnvironmentUsesGlabHelper(t *testing.T) {
 	if got := environmentValue(environment, "GIT_CONFIG_VALUE_1"); got != "!glab auth git-credential" {
 		t.Fatalf("unexpected config helper: %q", got)
 	}
-	if got := environmentValue(environment, "PATH"); got != "C:\\Program Files\\glab"+string(os.PathListSeparator)+"C:\\Windows" {
-		t.Fatalf("glab directory was not added to PATH: %q", got)
+	if got := environmentValue(environment, "GIT_CONFIG_KEY_2"); got != "credential.https://github.com.helper" {
+		t.Fatalf("unexpected GitHub config key: %q", got)
+	}
+	if got := environmentValue(environment, "GIT_CONFIG_VALUE_2"); got != "!gh auth git-credential" {
+		t.Fatalf("unexpected GitHub config helper: %q", got)
+	}
+	if got := environmentValue(environment, "GIT_CONFIG_KEY_3"); got != "" {
+		t.Fatalf("stale config pair survived: %q", got)
+	}
+	if got := environmentValue(environment, "GIT_CONFIG_VALUE_3"); got != "" {
+		t.Fatalf("stale config pair survived: %q", got)
+	}
+	if got := environmentValue(environment, "PATH"); got != "C:\\Program Files\\glab"+string(os.PathListSeparator)+"C:\\Program Files\\GitHub CLI"+string(os.PathListSeparator)+"C:\\Windows" {
+		t.Fatalf("CLI directories were not added to PATH: %q", got)
 	}
 	if got := environmentValue(environment, "GCM_INTERACTIVE"); got != "Always" {
 		t.Fatalf("unrelated environment value changed: %q", got)
 	}
+	assertGitConfigPairsMatchCount(t, environment)
+}
+
+func TestGitLabCredentialEnvironmentOmitsGitHubHelperWithoutGH(t *testing.T) {
+	base := []string{"Path=C:\\Windows"}
+	environment := withGitLabCredentialHelper(base, "C:\\Program Files\\glab", "")
+	if got := environmentValue(environment, "GIT_CONFIG_COUNT"); got != "2" {
+		t.Fatalf("unexpected config count: %q", got)
+	}
+	if got := environmentValue(environment, "GIT_CONFIG_KEY_2"); got != "" {
+		t.Fatalf("GitHub helper was injected without gh: %q", got)
+	}
+	if got := environmentValue(environment, "GIT_CONFIG_VALUE_2"); got != "" {
+		t.Fatalf("GitHub helper was injected without gh: %q", got)
+	}
+	if got := environmentValue(environment, "PATH"); got != "C:\\Program Files\\glab"+string(os.PathListSeparator)+"C:\\Windows" {
+		t.Fatalf("glab directory was not added to PATH: %q", got)
+	}
+	assertGitConfigPairsMatchCount(t, environment)
+}
+
+func TestGitLabCredentialEnvironmentKeepsPathWhenGitHubCLIIsOnPath(t *testing.T) {
+	separator := string(os.PathListSeparator)
+	ghDir := "C:\\Program Files\\GitHub CLI"
+	original := "C:\\Windows" + separator + ghDir
+	environment := withGitLabCredentialHelper([]string{"Path=" + original}, "C:\\Users\\tester\\bin", ghDir)
+	if got := environmentValue(environment, "GIT_CONFIG_COUNT"); got != "3" {
+		t.Fatalf("unexpected config count: %q", got)
+	}
+	want := "C:\\Users\\tester\\bin" + separator + original
+	if got := environmentValue(environment, "PATH"); got != want {
+		t.Fatalf("unexpected PATH: %q, want %q", got, want)
+	}
+	if occurrences := strings.Count(environmentValue(environment, "PATH"), ghDir); occurrences != 1 {
+		t.Fatalf("gh directory appears %d times on PATH", occurrences)
+	}
+	assertGitConfigPairsMatchCount(t, environment)
+}
+
+func TestCommandEnvForRemotesKeepsGitHubCredentialForGitLabSource(t *testing.T) {
+	app := NewApp()
+	app.executableHook = fakeExecutableLookup()
+	environment := app.commandEnvForRemotes(
+		RemoteSpec{Platform: PlatformGitLab, CloneURL: "https://gitlab.com/team/source.git"},
+		RemoteSpec{Platform: PlatformGitHub, CloneURL: "https://github.com/team/target.git"},
+	)
+	if got := environmentValue(environment, "GIT_CONFIG_VALUE_2"); got != "!gh auth git-credential" {
+		t.Fatalf("GitHub helper is missing for a GitLab to GitHub sync: %q", got)
+	}
+	if got := environmentValue(environment, "GIT_CONFIG_KEY_2"); got != "credential.https://github.com.helper" {
+		t.Fatalf("GitHub helper key is missing: %q", got)
+	}
+	if got := environmentValue(environment, "GIT_CONFIG_VALUE_1"); got != "!glab auth git-credential" {
+		t.Fatalf("GitLab helper was lost: %q", got)
+	}
+	if got := environmentValue(environment, "GIT_TERMINAL_PROMPT"); got != "0" {
+		t.Fatalf("terminal prompt setting was lost: %q", got)
+	}
+	assertGitConfigPairsMatchCount(t, environment)
+}
+
+func TestCommandEnvForRemotesSkipsHelpersWithoutGlab(t *testing.T) {
+	app := NewApp()
+	app.executableHook = func(name string) (string, error) {
+		if name == "gh" {
+			return "C:\\Program Files\\GitHub CLI\\gh.exe", nil
+		}
+		return "", errors.New("未找到命令: glab")
+	}
+	environment := app.commandEnvForRemotes(RemoteSpec{Platform: PlatformGitLab, CloneURL: "https://gitlab.com/team/source.git"})
+	for _, entry := range environment {
+		if key, _, ok := strings.Cut(entry, "="); ok && isGitConfigEntry(key) {
+			t.Fatalf("credential helpers were injected without glab: %q", entry)
+		}
+	}
+}
+
+func TestGitConfigOverridesAreAcceptedByGit(t *testing.T) {
+	git, err := findExecutable("git")
+	if err != nil {
+		t.Skip("Git is not installed in this environment")
+	}
+	app := NewApp()
+	app.executableHook = fakeExecutableLookup()
+	environment := app.commandEnvForRemotes(RemoteSpec{Platform: PlatformGitLab, CloneURL: "https://gitlab.com/team/source.git"})
+	for _, key := range []string{"credential.https://gitlab.com.helper", "credential.https://github.com.helper"} {
+		command := exec.Command(git, "config", "--get-all", key)
+		command.Env = environment
+		output, err := command.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git rejected the environment for %q: %v\n%s", key, err, output)
+		}
+		if strings.TrimSpace(string(output)) == "" {
+			t.Fatalf("git resolved no helper for %q", key)
+		}
+	}
+}
+
+func fakeExecutableLookup() func(string) (string, error) {
+	paths := map[string]string{
+		"glab": "C:\\Program Files\\glab\\glab.exe",
+		"gh":   "C:\\Program Files\\GitHub CLI\\gh.exe",
+	}
+	return func(name string) (string, error) {
+		if path, ok := paths[name]; ok {
+			return path, nil
+		}
+		return "", errors.New("未找到命令: " + name)
+	}
+}
+
+// assertGitConfigPairsMatchCount fails when GIT_CONFIG_COUNT no longer matches
+// the GIT_CONFIG_KEY_n/GIT_CONFIG_VALUE_n pairs Git would actually read.
+func assertGitConfigPairsMatchCount(t *testing.T, environment []string) {
+	t.Helper()
+	count := 0
+	if value := environmentValue(environment, "GIT_CONFIG_COUNT"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			t.Fatalf("GIT_CONFIG_COUNT is not a number: %q", value)
+		}
+		count = parsed
+	}
+	keys, values := gitConfigPairs(environment)
+	if len(keys) != count || len(values) != count {
+		t.Fatalf("GIT_CONFIG_COUNT=%d does not match %d keys and %d values", count, len(keys), len(values))
+	}
+	for index := 0; index < count; index++ {
+		if !slices.Contains(keys, fmt.Sprintf("GIT_CONFIG_KEY_%d", index)) {
+			t.Fatalf("GIT_CONFIG_KEY_%d is missing: %#v", index, keys)
+		}
+		if !slices.Contains(values, fmt.Sprintf("GIT_CONFIG_VALUE_%d", index)) {
+			t.Fatalf("GIT_CONFIG_VALUE_%d is missing: %#v", index, values)
+		}
+	}
+}
+
+func gitConfigPairs(environment []string) ([]string, []string) {
+	var keys, values []string
+	for _, entry := range environment {
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(strings.ToUpper(name), "GIT_CONFIG_KEY_"):
+			keys = append(keys, name)
+		case strings.HasPrefix(strings.ToUpper(name), "GIT_CONFIG_VALUE_"):
+			values = append(values, name)
+		}
+	}
+	return keys, values
 }
 
 func TestUsesGitLabHTTPSOnlyForGitLabHTTPSRemotes(t *testing.T) {

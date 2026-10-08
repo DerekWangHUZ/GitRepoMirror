@@ -2,6 +2,18 @@
 
 本项目版本号采用两级格式（如 `1.1`），不再设置第三级版本号。
 
+## [1.5] - 2026-10-08
+
+### 修复
+
+- 修复 GitLab HTTPS 镜像推送到 GitHub 时失败的问题：同步共用一份 Git 环境，GitLab 凭据 helper 清空全部其他 helper 后没有为 GitHub 补回 helper，加上应用强制 `GIT_TERMINAL_PROMPT=0`，推送会以 `could not read Username for 'https://github.com': terminal prompts disabled` 和退出码 128 结束；现在 GitLab 与 GitHub 的 helper 一并注入
+- `gh` 与 `glab` 一样先经 `findExecutable` 定位并把所在目录前置到 `PATH`；未安装 `gh` 时不注入 GitHub 键值对，保持原有行为
+
+### 测试
+
+- 新增 GitLab 源 + GitHub 目标场景的环境断言，校验注入 `credential.https://github.com.helper` 且 `GIT_CONFIG_COUNT` 与键值对数量一致
+- 新增缺失 `gh`、缺失 `glab`、`gh` 已在 `PATH` 以及真实 Git 接受该环境的回归测试
+
 ## [1.4] - 2026-10-02
 
 ### 修复

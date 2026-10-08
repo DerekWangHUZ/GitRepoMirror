@@ -31,6 +31,19 @@ glab auth status --hostname gitlab.com
 
 如果仍返回 401/403，请检查目标仓库是否属于当前账号、是否被安排删除，以及分支保护规则。不要把 token 写入仓库 URL 或提交到配置文件。
 
+## 推送 GitHub 时提示 `could not read Username for 'https://github.com': terminal prompts disabled`
+
+该错误出现在源为 GitLab HTTPS、目标为 GitHub 的镜像同步中。同步期间应用会临时接管 Git 凭据：先清空系统与全局 Git 配置中的其他 helper，再只为本次命令挂上 `glab`（GitLab）和 `gh`（GitHub）的 helper，并关闭交互式提示。GitHub 侧缺少凭据时就会以退出码 128 失败。
+
+先确认本机 `gh` 可用且已登录：
+
+```powershell
+gh auth status
+gh auth login --hostname github.com --web --git-protocol https
+```
+
+若 `gh` 未安装，GitHub 侧不会挂载 helper，同步仍会失败；请先安装 GitHub CLI。GitLab 侧的凭据复用说明见上一节。
+
 ## GitLab 推送时显示 `You are not allowed to push code to this project`
 
 这通常不是 CLI 登录失败。若目标项目的 API 信息包含 `marked_for_deletion_at` 或项目名称带有 `deletion_scheduled`，GitLab 会拒绝推送，即使当前账号仍是项目所有者。请在 GitLab 页面撤销删除计划，或换用一个新的目标仓库名称。
