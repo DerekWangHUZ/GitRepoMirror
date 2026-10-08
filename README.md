@@ -63,7 +63,7 @@ GitHub 和普通 Git 的完整镜像会使用强制推送。GitLab CLI 管理的
 设置和镜像映射保存在 `%AppData%\GitRepoMirror\data.json`。配置文件使用临时文件和原子替换写入。
 
 - 平台凭据由官方 CLI 和系统凭据存储管理
-- GitLab HTTPS 的 Git 凭据由本机 `glab auth git-credential` 临时提供，应用不会写入全局 Git 配置
+- GitLab HTTPS 的 Git 凭据由本机 `glab auth git-credential` 临时提供；镜像到 GitHub 时 GitHub 侧同时复用本机 `gh auth git-credential`，应用不会写入全局 Git 配置
 - 命令参数不经过 Shell 字符串拼接
 - 日志会隐藏 URL 中的用户名和密码
 - 通用 Git 模式不会创建、修改或删除平台项目
