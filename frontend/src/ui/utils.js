@@ -14,7 +14,28 @@ export const formatTime = (value) =>
         timeStyle: "short",
       }).format(new Date(value))
     : "尚未同步";
+
+// PLATFORMS is the single source of truth for every platform-aware template.
+// `id` matches the backend EnvironmentStatus/MirrorRequest identifiers.
+export const PLATFORMS = [
+  { id: "github", label: "GitHub", cli: "gh" },
+  { id: "gitlab", label: "GitLab", cli: "glab" },
+  { id: "gitee", label: "Gitee", cli: "gitee" },
+  { id: "codeberg", label: "Codeberg", cli: "fj" },
+  {
+    id: "azuredevops",
+    label: "Azure DevOps",
+    cli: "az",
+    namespaceHint: "组织/项目",
+    fixedVisibility: true,
+  },
+  { id: "generic", label: "其他 Git 平台", cli: "" },
+];
+
+export const platformMeta = (platform) =>
+  PLATFORMS.find((item) => item.id === platform);
 export const platformLabel = (platform) =>
-  ({ github: "GitHub", gitlab: "GitLab", generic: "其他 Git" })[platform] ||
-  "Git";
+  platformMeta(platform)?.label || "Git";
+export const managedPlatforms = () =>
+  PLATFORMS.filter((platform) => platform.cli);
 export const errorText = (error) => String(error).replace(/^Error:\s*/, "");

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -25,11 +26,20 @@ type Runner interface {
 }
 
 func (a *App) commandEnv() []string {
-	environment := os.Environ()
+	// Inherited GIT_CONFIG_* pairs are dropped: stale or orphaned pairs (a
+	// count without matching keys, for example) make every git invocation fail
+	// with "unable to parse command-line config", and the app rebuilds the
+	// pairs its credential strategy needs on its own.
+	environment := dropGitConfigOverrides(os.Environ())
 	proxy := a.store.Settings().Proxy
 	if proxy != "" {
 		environment = append(environment, "HTTP_PROXY="+proxy, "HTTPS_PROXY="+proxy, "ALL_PROXY="+proxy)
 	}
+	// The Azure CLI writes a per-command log file under %USERPROFILE%\.azure,
+	// which fails in restricted-integrity process contexts and aborts the
+	// whole command before it runs. The app already captures command output in
+	// its own run log, so the CLI-side file log is redundant.
+	environment = append(environment, "AZURE_LOGGING_ENABLE_LOG_FILE=false")
 	return replaceCommandEnv(environment, map[string]string{
 		"GIT_TERMINAL_PROMPT": "0",
 		"GCM_INTERACTIVE":     "Never",
@@ -39,16 +49,59 @@ func (a *App) commandEnv() []string {
 func (a *App) commandEnvForRemotes(remotes ...RemoteSpec) []string {
 	environment := a.commandEnv()
 	for _, remote := range remotes {
-		if !usesGitLabHTTPS(remote) {
+		entries, dirs, ok := a.credentialOverridesFor(remote)
+		if !ok {
 			continue
 		}
-		glabPath, err := a.resolveExecutable("glab")
-		if err != nil {
-			return environment
-		}
-		return withGitLabCredentialHelper(environment, filepath.Dir(glabPath), a.executableDir("gh"))
+		return withCredentialHelpers(environment, entries, dirs...)
 	}
 	return environment
+}
+
+// credentialOverridesFor resolves the git-credential environment strategy for
+// one remote. GitLab HTTPS remotes reset all helpers and reinstall the glab
+// helper; GitHub keeps its own helper so a follow-up push still authenticates.
+// Gitee HTTPS remotes receive a basic-auth extra header built from the CLI
+// token.
+func (a *App) credentialOverridesFor(remote RemoteSpec) ([][2]string, []string, bool) {
+	switch remote.Platform {
+	case PlatformGitLab:
+		if !usesGitLabHTTPS(remote) {
+			return nil, nil, false
+		}
+		return a.gitLabCredentialOverrides()
+	case PlatformGitee:
+		if !usesGiteeHTTPS(remote) {
+			return nil, nil, false
+		}
+		return a.giteeCredentialOverrides()
+	}
+	return nil, nil, false
+}
+
+func (a *App) gitLabCredentialOverrides() ([][2]string, []string, bool) {
+	glabDir := a.executableDir("glab")
+	if glabDir == "" {
+		return nil, nil, false
+	}
+	entries := [][2]string{
+		{"credential.helper", ""},
+		{"credential.https://gitlab.com.helper", "!glab auth git-credential"},
+	}
+	dirs := []string{glabDir}
+	if ghDir := a.executableDir("gh"); ghDir != "" {
+		entries = append(entries, [2]string{"credential.https://github.com.helper", "!gh auth git-credential"})
+		dirs = append(dirs, ghDir)
+	}
+	return entries, dirs, true
+}
+
+func usesGiteeHTTPS(remote RemoteSpec) bool {
+	if remote.Platform != PlatformGitee {
+		return false
+	}
+	parsed, err := url.Parse(remote.CloneURL)
+	return err == nil && strings.EqualFold(parsed.Scheme, "https") && strings.EqualFold(parsed.Hostname(), "gitee.com")
 }
 
 // resolveExecutable honours the test hook and otherwise falls back to the
@@ -94,6 +147,33 @@ func (a *App) runQuietInWithEnv(dir string, environment []string, name string, a
 		return string(output), fmt.Errorf("命令探测超时或已取消: %w", ctx.Err())
 	}
 	return string(output), err
+}
+
+// runQuietStdout captures stdout separately from stderr so commands whose
+// stderr carries update notices (gitee CLI) do not pollute parsed output.
+func (a *App) runQuietStdout(name string, args ...string) (string, error) {
+	if a.quietHook != nil {
+		return a.quietHook("", name, args...)
+	}
+	resolved, err := findExecutable(name)
+	if err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(a.commandContext(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, resolved, args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	cmd.Env = a.commandEnv()
+	hideCommandWindow(cmd)
+	err = cmd.Run()
+	if ctx.Err() != nil {
+		return stdout.String(), fmt.Errorf("命令探测超时或已取消: %w", ctx.Err())
+	}
+	if err != nil {
+		return stdout.String(), fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.String(), nil
 }
 func (a *App) runCommand(id, name string, args ...string) error {
 	return a.runCommandIn(id, "", name, args...)
@@ -182,9 +262,17 @@ func withGitLabCredentialHelper(environment []string, glabDir, ghDir string) []s
 		{"credential.helper", ""},
 		{"credential.https://gitlab.com.helper", "!glab auth git-credential"},
 	}
+	dirs := []string{glabDir}
 	if ghDir != "" {
 		entries = append(entries, [2]string{"credential.https://github.com.helper", "!gh auth git-credential"})
+		dirs = append(dirs, ghDir)
 	}
+	return withCredentialHelpers(environment, entries, dirs...)
+}
+
+// withCredentialHelpers installs GIT_CONFIG credential entries and prepends the
+// helper executable directories to PATH.
+func withCredentialHelpers(environment []string, entries [][2]string, dirs ...string) []string {
 	environment = dropGitConfigOverrides(environment)
 	overrides := make(map[string]string, 2*len(entries)+1)
 	overrides["GIT_CONFIG_COUNT"] = strconv.Itoa(len(entries))
@@ -192,7 +280,7 @@ func withGitLabCredentialHelper(environment []string, glabDir, ghDir string) []s
 		overrides[fmt.Sprintf("GIT_CONFIG_KEY_%d", index)] = entry[0]
 		overrides[fmt.Sprintf("GIT_CONFIG_VALUE_%d", index)] = entry[1]
 	}
-	if path, added := pathWithLeadingDirectories(environment, glabDir, ghDir); added {
+	if path, added := pathWithLeadingDirectories(environment, dirs...); added {
 		overrides["PATH"] = path
 	}
 	return replaceCommandEnv(environment, overrides)

@@ -108,7 +108,7 @@ func TestPrepareGitLabForcePushRestoresProtection(t *testing.T) {
 			Repository: "repo",
 		},
 	}
-	restore, force, err := app.prepareGitLabForcePush(repo, []string{"main"})
+	restore, force, err := app.prepareForcePush(repo, []string{"main"}, true)
 	if err != nil || !force {
 		t.Fatalf("prepareGitLabForcePush() = restore=%v force=%v err=%v", restore != nil, force, err)
 	}

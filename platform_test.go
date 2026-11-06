@@ -41,11 +41,16 @@ func TestClassifyPlatformAuthFailure(t *testing.T) {
 	}{
 		{"GitHub invalid token", PlatformGitHub, "The token in default is invalid.", "invalid"},
 		{"GitLab missing token", PlatformGitLab, "No access or refresh token was found; No token found", "missing"},
+		{"Codeberg stale token", PlatformCodeberg, "api error: token was already used", "invalid"},
 		{"unknown auth failure", PlatformGitLab, "connection reset", "unauthenticated"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			state, message := classifyPlatformAuthFailure(test.platform, test.output)
+			definition := platformByID(test.platform)
+			if definition == nil {
+				t.Fatalf("platform %q is not registered", test.platform)
+			}
+			state, message := classifyPlatformAuthFailure(definition, test.output)
 			if state != test.state || message == "" {
 				t.Fatalf("unexpected classification: %q %q", state, message)
 			}
@@ -61,7 +66,11 @@ func TestPlatformLoginArgsUseWebHTTPS(t *testing.T) {
 		{PlatformGitLab, "gitlab.com", "--device"},
 	}
 	for _, test := range tests {
-		args := platformLoginArgs(test.platform, test.host)
+		definition := platformByID(test.platform)
+		if definition == nil {
+			t.Fatalf("platform %q is not registered", test.platform)
+		}
+		args := definition.LoginArgs(test.host)
 		expected := []string{"auth", "login", "--hostname", test.host, test.flow, "--git-protocol", "https"}
 		if !reflect.DeepEqual(args, expected) {
 			t.Fatalf("unexpected login args: %#v", args)
@@ -305,6 +314,17 @@ func TestUsesGitLabHTTPSOnlyForGitLabHTTPSRemotes(t *testing.T) {
 	}
 }
 
+func TestCommandEnvDropsInheritedGitConfigOverrides(t *testing.T) {
+	t.Setenv("GIT_CONFIG_COUNT", "1")
+	t.Setenv("GIT_CONFIG_VALUE_0", "!'gh.exe' auth git-credential")
+	app := NewApp()
+	for _, entry := range app.commandEnv() {
+		if key, _, ok := strings.Cut(entry, "="); ok && isGitConfigEntry(key) {
+			t.Fatalf("inherited GIT_CONFIG override survived: %q", entry)
+		}
+	}
+}
+
 func TestCommandEnvDisablesInteractiveCredentialPrompts(t *testing.T) {
 	app := NewApp()
 	if got := environmentValue(app.commandEnv(), "GIT_TERMINAL_PROMPT"); got != "0" {
@@ -384,12 +404,23 @@ func TestManagedRepositoryLookupDoesNotTreatNetworkErrorAsMissing(t *testing.T) 
 	}
 }
 
-func TestGitOnlyTargetCannotBeDeletedRemotely(t *testing.T) {
+func TestRemoveRepositoryOnlyRemovesLocalRecord(t *testing.T) {
 	app := NewApp()
 	data := app.store.Snapshot()
-	data.Repositories = []Repository{{ID: "one", ManagementMode: ManagementGitOnly}}
+	data.Repositories = []Repository{{
+		ID:             "one",
+		ManagementMode: ManagementCLI,
+		Target:         RemoteSpec{Platform: PlatformGitHub, Namespace: "team", Repository: "repo"},
+	}}
 	app.store.Replace(data)
-	if err := app.RemoveRepository("one", true); err == nil {
-		t.Fatal("expected remote deletion to be rejected")
+	app.commandHook = func(_ string, _ string, name string, args ...string) error {
+		t.Fatalf("RemoveRepository must not run any command, got %s %v", name, args)
+		return nil
+	}
+	if err := app.RemoveRepository("one"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := app.repositoryByID("one"); ok {
+		t.Fatal("local record was not removed")
 	}
 }

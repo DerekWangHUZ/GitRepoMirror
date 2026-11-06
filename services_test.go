@@ -123,7 +123,10 @@ func TestRemoveRepositoryProtectsGitOnlyRemote(t *testing.T) {
 	data := app.store.Snapshot()
 	data.Repositories = []Repository{{ID: "generic", ManagementMode: ManagementGitOnly}}
 	app.store.Replace(data)
-	if err := app.RemoveRepository("generic", true); err == nil {
-		t.Fatal("expected remote deletion to be rejected")
+	if err := app.RemoveRepository("generic"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := app.repositoryByID("generic"); ok {
+		t.Fatal("local record was not removed")
 	}
 }

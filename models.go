@@ -3,9 +3,12 @@ package main
 import "time"
 
 const (
-	PlatformGitHub  = "github"
-	PlatformGitLab  = "gitlab"
-	PlatformGeneric = "generic"
+	PlatformGitHub   = "github"
+	PlatformGitLab   = "gitlab"
+	PlatformGitee    = "gitee"
+	PlatformCodeberg = "codeberg"
+	PlatformAzureDevOps = "azuredevops"
+	PlatformGeneric  = "generic"
 
 	ManagementCLI     = "cli"
 	ManagementGitOnly = "git-only"
@@ -61,10 +64,13 @@ type ToolStatus struct {
 }
 
 type EnvironmentStatus struct {
-	Git    ToolStatus `json:"git"`
-	GitLFS ToolStatus `json:"gitLfs"`
-	GitHub ToolStatus `json:"github"`
-	GitLab ToolStatus `json:"gitlab"`
+	Git         ToolStatus `json:"git"`
+	GitLFS      ToolStatus `json:"gitLfs"`
+	GitHub      ToolStatus `json:"github"`
+	GitLab      ToolStatus `json:"gitlab"`
+	Gitee       ToolStatus `json:"gitee"`
+	Codeberg    ToolStatus `json:"codeberg"`
+	AzureDevOps ToolStatus `json:"azuredevops"`
 }
 
 type MirrorRequest struct {

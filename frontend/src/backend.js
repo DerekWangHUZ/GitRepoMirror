@@ -34,6 +34,15 @@ const previewRepositories = [
     lastSync: "0001-01-01T00:00:00Z",
     lastError: "network unavailable",
   },
+  {
+    id: "gitee-mirror",
+    source: { platform: "gitee", displayName: "team/gitee-app" },
+    target: { platform: "codeberg", displayName: "team/gitee-app" },
+    managementMode: "cli",
+    mode: "mirror",
+    status: "healthy",
+    lastSync: "2026-11-01T10:30:00Z",
+  },
 ];
 
 const query = new URLSearchParams(window.location.search);
@@ -53,7 +62,19 @@ const preview = {
     git: { installed: true },
     gitLfs: { installed: false },
     github: { installed: true, authenticated: true, login: "workspace" },
-    gitlab: { installed: false, authenticated: false },
+    gitlab: { installed: true, authenticated: false, authState: "missing" },
+    gitee: { installed: true, authenticated: true, login: "DerekWangHUZ" },
+    codeberg: {
+      installed: false,
+      authenticated: false,
+      message: "未安装 fj，可使用完整 URL 降级同步",
+    },
+    azuredevops: {
+      installed: true,
+      authenticated: false,
+      authState: "invalid",
+      message: "Azure DevOps CLI 凭据已失效，请重新登录",
+    },
   }),
   StartLogin: async () => {},
   CreateMirror: async () => {},

@@ -1,6 +1,35 @@
 # 变更记录
 
-本项目版本号采用两级格式（如 `1.1`），不再设置第三级版本号。
+本项目版本号采用两级格式（如 `2.0`），不再设置第三级版本号。
+
+## [2.0] - 2026-11-06
+
+### 新增
+
+- Gitee（`gitee` CLI）、Codeberg（`fj` CLI）与 Azure DevOps（`az` CLI）平台支持：环境检测、CLI 登录、目标仓库创建/关联/重命名与镜像同步全链路；Azure DevOps 命名空间为 `<组织>/<项目>`，可见性跟随项目设置
+- 已登录平台在环境状态卡片显示账户名：`gh`/`glab` 沿用既有查询，`gitee` 经 `api user`，`fj` 解析 `whoami`，`az` 读取 Azure 账户名
+- Gitee HTTPS 同步凭据由本机 `gitee` CLI 令牌临时生成授权头，经进程环境注入，不写入命令行与磁盘
+- 长账户名在环境卡片中以省略号截断显示，不再撑破侧栏布局
+
+### 变更
+
+- 删除仓库条目不再提供“同时删除远端仓库”选项：仅解除本地绑定，远端仓库不受任何影响
+- 全部确认操作改为应用内弹窗，不再出现以 wails.localhost 为标题的 WebView2 原生对话框
+- 目标平台选择、环境卡片与登录入口由统一平台注册表驱动；GitHub 不再提供 internal 可见性（GitHub CLI 在 github.com 不支持该参数）
+- 平台识别扩展：gitee.com、codeberg.org 与 dev.azure.com 地址自动归类，Azure DevOps 支持 `/org/proj/_git/repo` 与 SCP `v3` 地址
+- 文档结构调整：移除 CONTRIBUTING、SECURITY、架构说明与故障排查文档，变更记录移至 docs/CHANGELOG.md
+
+### 修复
+
+- 后台同步完成后的自动刷新不再重置正在编辑的设置表单
+- 启动环境中遗留的孤儿 `GIT_CONFIG_*` 变量不再导致同步命令以 `unable to parse command-line config` 失败
+- WebView2 用户数据目录不再按 exe 文件名碎片化存储：优先使用 `%LOCALAPPDATA%\GitRepoMirror\WebView2`，该位置不可写时（受限制完整性级别的运行环境）自动回退到 exe 同目录，旧版残留浏览器状态不再影响启动
+- Azure CLI 子进程注入 `AZURE_LOGGING_ENABLE_LOG_FILE=false`：受限完整性级别的运行环境中，Azure CLI 因无法写入 `%USERPROFILE%\.azure\commands` 命令日志而整体崩溃的问题不再发生，登录状态与账户名可正常探测
+
+### 测试
+
+- 新增平台适配器命令序列、Gitee 凭据环境注入、Azure 路径解析、删除语义与前端确认弹窗的单元测试
+- Playwright 视觉基线随界面更新重录
 
 ## [1.5] - 2026-10-08
 

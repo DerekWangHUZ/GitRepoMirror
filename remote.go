@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -35,6 +36,10 @@ func parseRemote(raw string) (RemoteSpec, error) {
 		if err != nil {
 			return RemoteSpec{}, err
 		}
+		parts, err = applyHostPathOverride(host, parts)
+		if err != nil {
+			return RemoteSpec{}, err
+		}
 		return makeRemote(platformForHost(host), host, parts, raw), nil
 	}
 
@@ -55,7 +60,23 @@ func parseRemote(raw string) (RemoteSpec, error) {
 		return RemoteSpec{}, err
 	}
 	host := strings.ToLower(u.Hostname())
+	parts, err = applyHostPathOverride(host, parts)
+	if err != nil {
+		return RemoteSpec{}, err
+	}
 	return makeRemote(platformForHost(host), host, parts, raw), nil
+}
+
+// applyHostPathOverride lets platforms with non owner/repo URL layouts
+// (Azure DevOps) normalize their path segments after generic parsing.
+func applyHostPathOverride(host string, parts []string) ([]string, error) {
+	if definition := platformByHost(host); definition != nil && definition.ParseHostPath != nil {
+		return definition.ParseHostPath(parts)
+	}
+	if platformForHost(host) == PlatformAzureDevOps {
+		return parseAzureDevOpsPath(parts)
+	}
+	return parts, nil
 }
 
 func splitRepoPath(value string) ([]string, error) {
@@ -81,14 +102,14 @@ func validPathParts(parts []string) bool {
 }
 
 func platformForHost(host string) string {
-	switch strings.ToLower(host) {
-	case "github.com":
-		return PlatformGitHub
-	case "gitlab.com":
-		return PlatformGitLab
-	default:
-		return PlatformGeneric
+	host = strings.ToLower(host)
+	if definition := platformByHost(host); definition != nil {
+		return definition.ID
 	}
+	if strings.HasSuffix(host, ".dev.azure.com") {
+		return PlatformAzureDevOps
+	}
+	return PlatformGeneric
 }
 
 func makeRemote(platform, host string, parts []string, cloneURL string) RemoteSpec {
@@ -96,6 +117,9 @@ func makeRemote(platform, host string, parts []string, cloneURL string) RemoteSp
 	repository := parts[len(parts)-1]
 	path := namespace + "/" + repository
 	webURL := "https://" + host + "/" + path
+	if definition := platformByID(platform); definition != nil && definition.WebURL != nil {
+		webURL = definition.WebURL(namespace, repository)
+	}
 	if platform == PlatformGeneric && (host == "" || strings.Contains(host, "@")) {
 		webURL = ""
 	}
@@ -106,20 +130,24 @@ func makeRemote(platform, host string, parts []string, cloneURL string) RemoteSp
 }
 
 func validateManagedTarget(platform, namespace, name, visibility string) error {
-	if platform != PlatformGitHub && platform != PlatformGitLab {
+	definition := platformByID(platform)
+	if definition == nil || !definition.Managed {
 		return fmt.Errorf("目标平台不支持 CLI 管理")
 	}
 	parts := strings.Split(strings.Trim(namespace, "/"), "/")
 	if namespace == "" || !validPathParts(parts) {
 		return fmt.Errorf("目标命名空间格式无效")
 	}
+	if definition.ValidateNamespace != nil {
+		if err := definition.ValidateNamespace(namespace); err != nil {
+			return err
+		}
+	}
 	if !pathPartPattern.MatchString(name) || name == "." || name == ".." || len(name) > 100 {
 		return fmt.Errorf("目标仓库名只能包含字母、数字、点、连字符和下划线，且不超过 100 个字符")
 	}
-	switch visibility {
-	case "private", "internal", "public":
-		return nil
-	default:
+	if !slices.Contains(definition.Visibilities, visibility) {
 		return fmt.Errorf("目标仓库可见性无效")
 	}
+	return nil
 }

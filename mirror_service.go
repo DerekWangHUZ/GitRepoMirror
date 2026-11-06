@@ -61,20 +61,21 @@ func (a *App) resolveTarget(id string, req MirrorRequest, source RemoteSpec, env
 	if platform == "" {
 		platform = PlatformGeneric
 	}
-	ready := platform == PlatformGitHub && environment.GitHub.Installed && environment.GitHub.Authenticated
-	ready = ready || platform == PlatformGitLab && environment.GitLab.Installed && environment.GitLab.Authenticated
+	definition := platformByID(platform)
+	ready := definition != nil && definition.Managed
 	if ready {
+		tool := environment.Tool(platform)
+		ready = tool.Installed && tool.Authenticated
+	}
+	if ready {
+		tool := environment.Tool(platform)
 		name := strings.TrimSpace(req.TargetName)
 		if name == "" {
 			name = strings.TrimSpace(req.Prefix) + source.Repository + strings.TrimSpace(req.Suffix)
 		}
 		namespace := strings.Trim(strings.TrimSpace(req.TargetNamespace), "/")
 		if namespace == "" {
-			if platform == PlatformGitHub {
-				namespace = environment.GitHub.Login
-			} else {
-				namespace = environment.GitLab.Login
-			}
+			namespace = tool.Login
 		}
 		if err := validateManagedTarget(platform, namespace, name, req.Visibility); err != nil {
 			return RemoteSpec{}, "", "", err
@@ -86,11 +87,8 @@ func (a *App) resolveTarget(id string, req MirrorRequest, source RemoteSpec, env
 	if err != nil {
 		return RemoteSpec{}, "", "", fmt.Errorf("目标仓库: %w", err)
 	}
-	if platform == PlatformGitHub && target.Platform != PlatformGitHub {
-		return RemoteSpec{}, "", "", fmt.Errorf("GitHub 降级模式需要 github.com 的完整目标 URL")
-	}
-	if platform == PlatformGitLab && target.Platform != PlatformGitLab {
-		return RemoteSpec{}, "", "", fmt.Errorf("GitLab 降级模式需要 gitlab.com 的完整目标 URL")
+	if definition != nil && target.Platform != platform {
+		return RemoteSpec{}, "", "", fmt.Errorf("%s 降级模式需要 %s 的完整目标 URL", definition.Label, definition.Host)
 	}
 	a.emitProgress(id, 1, "检查目标仓库", "running")
 	if _, err := a.runQuiet("git", "ls-remote", target.CloneURL); err != nil {
@@ -171,32 +169,7 @@ func (a *App) SyncAll() error {
 	return nil
 }
 
-func (a *App) RemoveRepository(id string, deleteRemote bool) error {
-	repo, ok := a.repositoryByID(id)
-	if !ok {
-		return fmt.Errorf("未找到仓库记录")
-	}
-	if deleteRemote {
-		if repo.ManagementMode != ManagementCLI {
-			return fmt.Errorf("该目标由普通 Git 管理，只能解除本地记录")
-		}
-		environment := a.CheckEnvironment()
-		ready := repo.Target.Platform == PlatformGitHub && environment.GitHub.Authenticated
-		ready = ready || repo.Target.Platform == PlatformGitLab && environment.GitLab.Authenticated
-		if !ready {
-			return fmt.Errorf("对应平台 CLI 未登录，不能删除远端仓库")
-		}
-		fullName := repo.Target.Namespace + "/" + repo.Target.Repository
-		var err error
-		if repo.Target.Platform == PlatformGitHub {
-			err = a.runCommand(id, "gh", "repo", "delete", fullName, "--yes")
-		} else {
-			err = a.runCommand(id, "glab", "repo", "delete", fullName, "--yes")
-		}
-		if err != nil {
-			return fmt.Errorf("远端仓库删除失败: %w", err)
-		}
-	}
+func (a *App) RemoveRepository(id string) error {
 	err := a.store.Remove(id)
 	if err == nil {
 		a.emitChanged()

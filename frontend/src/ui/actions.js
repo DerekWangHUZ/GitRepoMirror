@@ -1,4 +1,37 @@
-import { $, errorText, platformLabel } from "./utils.js";
+import { $, errorText, escapeHTML, platformLabel } from "./utils.js";
+
+// confirmDialog replaces window.confirm so the app never shows the native
+// WebView2 dialog (titled "wails.localhost") to the user.
+export function confirmDialog({
+  title,
+  message,
+  confirmText = "确认",
+  cancelText = "取消",
+  danger = false,
+}) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop confirm-backdrop";
+    backdrop.innerHTML = `<div class="modal confirm-modal" role="dialog" aria-modal="true"><div class="modal-head"><div><h2>${escapeHTML(title)}</h2><p>${escapeHTML(message).replaceAll("\n", "<br>")}</p></div></div><div class="modal-actions"><button type="button" class="button secondary" data-confirm-cancel>${escapeHTML(cancelText)}</button><button type="button" class="button ${danger ? "danger" : "primary"}" data-confirm-ok>${escapeHTML(confirmText)}</button></div></div>`;
+    const done = (value) => {
+      document.removeEventListener("keydown", onKey);
+      backdrop.remove();
+      resolve(value);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") done(false);
+    };
+    backdrop.addEventListener("click", (event) => {
+      const target = event.target.closest("button");
+      if (target?.hasAttribute("data-confirm-ok")) return done(true);
+      if (target?.hasAttribute("data-confirm-cancel")) return done(false);
+      if (event.target === event.currentTarget) done(false);
+    });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(backdrop);
+    backdrop.querySelector("[data-confirm-ok]").focus();
+  });
+}
 
 export function createActions(state, backend, renderer) {
   function toast(message, type = "info") {
@@ -61,7 +94,7 @@ export function createActions(state, backend, renderer) {
     try {
       await backend.StartLogin(platform);
       await checkEnvironment();
-      const tool = platform === "github" ? state.env.github : state.env.gitlab;
+      const tool = state.env[platform];
       if (!tool?.authenticated)
         throw new Error(
           tool?.message || `${platformLabel(platform)} 登录未完成`,
@@ -120,8 +153,12 @@ export function createActions(state, backend, renderer) {
 
   async function syncAll() {
     if (state.busy.size) return;
-    if (!confirm(`确认同步全部 ${state.data.repositories.length} 个仓库？`))
-      return;
+    const confirmed = await confirmDialog({
+      title: "全部同步",
+      message: `确认同步全部 ${state.data.repositories.length} 个仓库？`,
+      confirmText: "全部同步",
+    });
+    if (!confirmed) return;
     const ids = state.data.repositories.map((repo) => repo.id);
     ids.forEach((id) => state.busy.add(id));
     renderer.repositories();
@@ -142,18 +179,18 @@ export function createActions(state, backend, renderer) {
   async function removeOne(id) {
     const repo = state.data.repositories.find((item) => item.id === id);
     if (!repo) return;
-    let deleteRemote = false;
-    if (repo.managementMode === "cli")
-      deleteRemote = confirm(
-        `是否同时删除远端仓库 ${repo.target.displayName}？\n\n选择“确定”会删除远端仓库；选择“取消”只解除本地绑定。`,
-      );
-    if (!deleteRemote && !confirm("确认只解除本地绑定并保留远端仓库？")) return;
+    // Removing a repository only unbinds the local record; the remote
+    // repository is never touched.
+    const confirmed = await confirmDialog({
+      title: "解除本地绑定",
+      message: `将解除 ${repo.source.displayName} → ${repo.target.displayName} 的本地绑定。\n远端仓库不会被删除。`,
+      confirmText: "解除绑定",
+      danger: true,
+    });
+    if (!confirmed) return;
     try {
-      await backend.RemoveRepository(id, deleteRemote);
-      toast(
-        deleteRemote ? "远端仓库和本地记录已删除" : "已解除本地绑定",
-        "success",
-      );
+      await backend.RemoveRepository(id);
+      toast("已解除本地绑定", "success");
       await refreshData();
     } catch (error) {
       toast(errorText(error), "error");

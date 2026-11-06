@@ -6,10 +6,24 @@ import (
 )
 
 func (a *App) CheckEnvironment() EnvironmentStatus {
-	return EnvironmentStatus{
+	status := EnvironmentStatus{
 		Git: installedTool("git"), GitLFS: installedTool("git-lfs"),
-		GitHub: a.checkPlatformTool(PlatformGitHub), GitLab: a.checkPlatformTool(PlatformGitLab),
 	}
+	for _, definition := range managedPlatforms() {
+		switch definition.ID {
+		case PlatformGitHub:
+			status.GitHub = a.checkPlatformTool(definition)
+		case PlatformGitLab:
+			status.GitLab = a.checkPlatformTool(definition)
+		case PlatformGitee:
+			status.Gitee = a.checkPlatformTool(definition)
+		case PlatformCodeberg:
+			status.Codeberg = a.checkPlatformTool(definition)
+		case PlatformAzureDevOps:
+			status.AzureDevOps = a.checkPlatformTool(definition)
+		}
+	}
+	return status
 }
 
 func installedTool(name string) ToolStatus {
@@ -20,76 +34,62 @@ func installedTool(name string) ToolStatus {
 	return ToolStatus{Installed: true, Path: path, Message: "可用"}
 }
 
-func (a *App) checkPlatformTool(platform string) ToolStatus {
-	name := platformCLI(platform)
+func (a *App) checkPlatformTool(definition *platformDefinition) ToolStatus {
+	name := definition.CLI
 	status := installedTool(name)
 	if !status.Installed {
-		if platform == PlatformGitHub {
-			status.Message = "未安装 gh，可使用完整 URL 降级同步"
-		} else {
-			status.Message = "未安装 glab，可使用完整 URL 降级同步"
-		}
+		status.Message = fmt.Sprintf("未安装 %s，可使用完整 URL 降级同步", name)
 		return status
 	}
-	var authArgs, loginArgs []string
-	if platform == PlatformGitHub {
-		authArgs = []string{"auth", "status", "--hostname", "github.com"}
-		loginArgs = []string{"api", "user", "--hostname", "github.com", "--jq", ".login"}
-	} else {
-		authArgs = []string{"auth", "status", "--hostname", "gitlab.com"}
-		loginArgs = []string{"api", "user", "--hostname", "gitlab.com", "--jq", ".username"}
-	}
-	output, err := a.runQuiet(name, authArgs...)
+	output, err := a.runQuiet(name, definition.AuthStatusArgs()...)
 	if err != nil {
-		status.AuthState, status.Message = classifyPlatformAuthFailure(platform, output)
+		status.AuthState, status.Message = classifyPlatformAuthFailure(definition, output)
 		return status
 	}
 	status.Authenticated = true
 	status.AuthState = "authenticated"
-	if login, err := a.runQuiet(name, loginArgs...); err == nil {
-		status.Login = strings.TrimSpace(login)
+	if definition.LoginProbeArgs != nil {
+		if login, err := a.runQuiet(name, definition.LoginProbeArgs()...); err == nil {
+			status.Login = definition.ParseLogin(login)
+		}
+	} else {
+		status.Login = definition.ParseLogin(output)
+	}
+	if status.Login == "" {
+		a.emitLog("", "warning", definition.Label+" CLI 登录名解析失败，原始输出前 200 字符: "+truncateForLog(output))
 	}
 	status.Message = "已登录"
 	return status
 }
 
-func classifyPlatformAuthFailure(platform, output string) (string, string) {
-	label := "平台 CLI"
-	if platform == PlatformGitHub {
-		label = "GitHub CLI"
-	} else if platform == PlatformGitLab {
-		label = "GitLab CLI"
+func truncateForLog(output string) string {
+	output = strings.TrimSpace(output)
+	if len(output) > 200 {
+		return output[:200] + "..."
 	}
+	return output
+}
+
+func classifyPlatformAuthFailure(definition *platformDefinition, output string) (string, string) {
+	label := definition.Label + " CLI"
 	lower := strings.ToLower(output)
 	if strings.Contains(lower, "no access or refresh token") || strings.Contains(lower, "no token found") {
 		return "missing", label + " 缺少访问令牌，请重新登录"
 	}
-	if strings.Contains(lower, "token") && (strings.Contains(lower, "invalid") || strings.Contains(lower, "expired")) {
+	if strings.Contains(lower, "token") && (strings.Contains(lower, "invalid") || strings.Contains(lower, "expired") || strings.Contains(lower, "already used")) {
 		return "invalid", label + " 凭据已失效，请重新登录"
 	}
 	return "unauthenticated", label + " 尚未登录或认证检查失败"
 }
 
-func platformLoginArgs(platform, host string) []string {
-	flow := "--web"
-	if platform == PlatformGitLab {
-		flow = "--device"
-	}
-	return []string{"auth", "login", "--hostname", host, flow, "--git-protocol", "https"}
-}
-
 func (a *App) StartLogin(platform string) error {
-	name := platformCLI(platform)
-	if name == "" {
+	definition := platformByID(platform)
+	if definition == nil || definition.LoginArgs == nil {
 		return fmt.Errorf("该平台不支持 CLI 登录")
 	}
-	path, err := findExecutable(name)
+	path, err := findExecutable(definition.CLI)
 	if err != nil {
-		return fmt.Errorf("未找到 %s", name)
+		return fmt.Errorf("未找到 %s", definition.CLI)
 	}
-	host := "github.com"
-	if platform == PlatformGitLab {
-		host = "gitlab.com"
-	}
-	return startLoginCommand(path, platformLoginArgs(platform, host)...)
+	return startLoginCommand(path, definition.LoginArgs(definition.Host)...)
 }

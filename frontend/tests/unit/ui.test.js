@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { appendLog, createState } from "../../src/ui/state.js";
 import { createRenderer } from "../../src/ui/renderer.js";
+import { confirmDialog } from "../../src/ui/actions.js";
 import {
   environmentRow,
   repositoryCard,
@@ -8,7 +9,12 @@ import {
   settingsView,
   targetFields,
 } from "../../src/ui/templates.js";
-import { escapeHTML, formatTime, platformLabel } from "../../src/ui/utils.js";
+import {
+  escapeHTML,
+  formatTime,
+  managedPlatforms,
+  platformLabel,
+} from "../../src/ui/utils.js";
 
 describe("UI contracts", () => {
   it("escapes untrusted values and preserves platform labels", () => {
@@ -16,8 +22,24 @@ describe("UI contracts", () => {
       "&lt;script a=&quot;b&quot;&gt;&#39;&amp;",
     );
     expect(platformLabel("github")).toBe("GitHub");
+    expect(platformLabel("gitee")).toBe("Gitee");
+    expect(platformLabel("codeberg")).toBe("Codeberg");
+    expect(platformLabel("azuredevops")).toBe("Azure DevOps");
     expect(platformLabel("custom")).toBe("Git");
     expect(formatTime("0001-01-01T00:00:00Z")).toBe("尚未同步");
+  });
+
+  it("exposes every managed platform with a CLI name", () => {
+    const platforms = Object.fromEntries(
+      managedPlatforms().map((platform) => [platform.id, platform.cli]),
+    );
+    expect(platforms).toEqual({
+      github: "gh",
+      gitlab: "glab",
+      gitee: "gitee",
+      codeberg: "fj",
+      azuredevops: "az",
+    });
   });
 
   it("caps logs at one thousand entries", () => {
@@ -102,6 +124,26 @@ describe("UI contracts", () => {
     expect(fallback.html).toContain("targetUrl");
   });
 
+  it("adapts target fields for the new platforms", () => {
+    const gitee = targetFields("gitee", {
+      gitee: { installed: true, authenticated: true, login: "gitee-user" },
+    });
+    expect(gitee.managed).toBe(true);
+    expect(gitee.html).toContain('value="gitee-user"');
+    expect(gitee.html).toContain('name="visibility"');
+    const azure = targetFields("azuredevops", {
+      azuredevops: { installed: true, authenticated: true, login: "user@example.com" },
+    });
+    expect(azure.managed).toBe(true);
+    expect(azure.html).toContain("组织/项目");
+    expect(azure.html).not.toContain('name="visibility"');
+    const codebergFallback = targetFields("codeberg", {
+      codeberg: { installed: false, authenticated: false },
+    });
+    expect(codebergFallback.managed).toBe(false);
+    expect(codebergFallback.html).toContain("fj 缺失或未登录");
+  });
+
   it("preserves settings defaults and values", () => {
     const html = settingsView({
       concurrency: 3,
@@ -119,5 +161,29 @@ describe("UI contracts", () => {
   it("marks prune target refs as enabled when the setting is on", () => {
     const html = settingsView({ pruneTargetRefs: true });
     expect(html).toContain('name="pruneTargetRefs" checked');
+  });
+
+  it("resolves the in-app confirm dialog without native confirm", async () => {
+    const pending = confirmDialog({
+      title: "测试",
+      message: "确认吗",
+      confirmText: "好",
+    });
+    await Promise.resolve();
+    const backdrop = document.querySelector(".confirm-backdrop");
+    expect(backdrop).toBeTruthy();
+    backdrop
+      .querySelector("[data-confirm-ok]")
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await expect(pending).resolves.toBe(true);
+  });
+
+  it("cancels the in-app confirm dialog from the cancel button", async () => {
+    const pending = confirmDialog({ title: "测试", message: "确认吗" });
+    await Promise.resolve();
+    document
+      .querySelector(".confirm-backdrop [data-confirm-cancel]")
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await expect(pending).resolves.toBe(false);
   });
 });

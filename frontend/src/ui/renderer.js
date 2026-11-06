@@ -7,7 +7,7 @@ import {
   settingsView,
   targetFields,
 } from "./templates.js";
-import { $, escapeHTML } from "./utils.js";
+import { $, escapeHTML, managedPlatforms } from "./utils.js";
 
 export function createRenderer(state) {
   function showView() {
@@ -32,20 +32,35 @@ export function createRenderer(state) {
     $("#logsView").innerHTML = logsView(state.logs);
   }
   function settings() {
+    const form = $("#settingsForm");
+    // Keep the user's in-progress edits: skip re-rendering while a form field
+    // has focus, so background refreshes never wipe typed values.
+    if (form && document.activeElement && form.contains(document.activeElement))
+      return;
     $("#settingsView").innerHTML = settingsView(state.data.settings);
   }
 
   function environment() {
     const env = state.env;
+    const platforms = managedPlatforms();
     const gitOK = Boolean(env.git?.installed);
-    const connected = [env.github, env.gitlab].filter(
-      (tool) => tool?.authenticated,
+    const connected = platforms.filter(
+      (platform) => env[platform.id]?.authenticated,
     ).length;
     $("#envPill").className = `env-pill ${gitOK ? "ok" : "bad"}`;
     $("#envPill").innerHTML =
       `<i></i><span>${gitOK ? `Git 可用 · ${connected} 个平台已连接` : "环境需要处理"}</span>`;
+    const rows = platforms
+      .map(
+        (platform) =>
+          environmentRow(`${platform.label} CLI`, env[platform.id], platform.id),
+      )
+      .join("");
+    const logins = platforms
+      .map((platform) => loginButton(env[platform.id], platform.id))
+      .join("");
     $("#environmentCard").innerHTML =
-      `<div class="env-title"><span>环境状态</span><button id="refreshEnv" data-action="refresh-env">↻</button></div>${environmentRow("Git", env.git)}${environmentRow("GitHub CLI", env.github, "github")}${environmentRow("GitLab CLI", env.gitlab, "gitlab")}<div class="login-actions">${loginButton(env.github, "github")}${loginButton(env.gitlab, "gitlab")}</div>`;
+      `<div class="env-title"><span>环境状态</span><button id="refreshEnv" data-action="refresh-env">↻</button></div>${environmentRow("Git", env.git)}${rows}<div class="login-actions">${logins}</div>`;
   }
 
   function consoleOutput() {

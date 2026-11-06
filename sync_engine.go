@@ -36,15 +36,22 @@ func (a *App) performSync(repo Repository, syncLFS bool, environment Environment
 			return fmt.Errorf("无法识别源仓库默认分支")
 		}
 		branches = []string{strings.TrimSpace(branch)}
-	} else if repo.Target.Platform == PlatformGitLab && repo.ManagementMode == ManagementCLI {
-		var err error
-		branches, err = localBranches(cloneDir, commandEnvironment, a)
-		if err != nil {
-			a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
-			return fmt.Errorf("无法读取源仓库分支: %w", err)
+	} else {
+		definition := platformByID(repo.Target.Platform)
+		if definition != nil && definition.ForceNegotiation && repo.ManagementMode == ManagementCLI {
+			var err error
+			branches, err = localBranches(cloneDir, commandEnvironment, a)
+			if err != nil {
+				a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
+				return fmt.Errorf("无法读取源仓库分支: %w", err)
+			}
 		}
 	}
-	restoreProtection, force, err := a.prepareGitLabForcePush(repo, branches)
+	needsNegotiation := false
+	if definition := platformByID(repo.Target.Platform); definition != nil {
+		needsNegotiation = definition.ForceNegotiation && repo.ManagementMode == ManagementCLI
+	}
+	restoreProtection, force, err := a.prepareForcePush(repo, branches, needsNegotiation)
 	if err != nil {
 		a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
 		return err
@@ -86,13 +93,17 @@ func (a *App) performSync(repo Repository, syncLFS bool, environment Environment
 	return nil
 }
 
-func (a *App) prepareGitLabForcePush(repo Repository, branches []string) (func() error, bool, error) {
+// prepareForcePush temporarily relaxes protected-branch force-push rules on
+// platforms that require negotiation (GitLab today) so a full mirror can push.
+func (a *App) prepareForcePush(repo Repository, branches []string, needsNegotiation bool) (func() error, bool, error) {
 	noop := func() error { return nil }
-	if repo.Target.Platform != PlatformGitLab || repo.ManagementMode != ManagementCLI {
-		return noop, repo.Target.Platform != PlatformGitLab, nil
+	if !needsNegotiation {
+		// Platforms without force-push negotiation always receive forced
+		// pushes; only negotiation platforms push softly until relaxed.
+		return noop, true, nil
 	}
 	fullName := strings.Trim(strings.TrimSpace(repo.Target.Namespace), "/") + "/" + strings.TrimSpace(repo.Target.Repository)
-	rules, err := a.fetchGitLabProtectedBranches(fullName)
+	rules, err := fetchGitLabProtectedBranches(a, fullName)
 	if err != nil {
 		a.emitLog(repo.ID, "warning", "无法读取 GitLab 分支保护规则，改用非强制推送: "+err.Error())
 		return noop, false, nil
@@ -180,7 +191,7 @@ func protectedBranchRuleMatches(rule, branch string) bool {
 }
 
 func mirrorPushCommand(target RemoteSpec, force, prune bool) commandSpec {
-	force = force || target.Platform != PlatformGitLab
+	force = force || !forceNegotiationRequired(target.Platform)
 	args := []string{"push"}
 	if force {
 		args = append(args, "--force")
@@ -197,7 +208,7 @@ func mirrorPushCommand(target RemoteSpec, force, prune bool) commandSpec {
 }
 
 func shallowPushCommand(target RemoteSpec, branch string, force bool) commandSpec {
-	force = force || target.Platform != PlatformGitLab
+	force = force || !forceNegotiationRequired(target.Platform)
 	args := []string{"push"}
 	if force {
 		args = append(args, "--force")

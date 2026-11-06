@@ -25,14 +25,10 @@ type gitLabProtectedBranch struct {
 }
 
 func platformCLI(platform string) string {
-	switch platform {
-	case PlatformGitHub:
-		return "gh"
-	case PlatformGitLab:
-		return "glab"
-	default:
-		return ""
+	if definition := platformByID(platform); definition != nil {
+		return definition.CLI
 	}
+	return ""
 }
 
 func cloneCommand(remote RemoteSpec, destination, mode string, status EnvironmentStatus) commandSpec {
@@ -40,12 +36,13 @@ func cloneCommand(remote RemoteSpec, destination, mode string, status Environmen
 	if mode == "shallow" {
 		flags = []string{"--depth=1", "--single-branch"}
 	}
-	ready := remote.Platform == PlatformGitHub && status.GitHub.Installed && status.GitHub.Authenticated
-	ready = ready || remote.Platform == PlatformGitLab && status.GitLab.Installed && status.GitLab.Authenticated
-	if ready {
-		args := []string{"repo", "clone", remote.CloneURL, destination, "--"}
-		args = append(args, flags...)
-		return commandSpec{Name: platformCLI(remote.Platform), Args: args}
+	definition := platformByID(remote.Platform)
+	if definition != nil && definition.CloneViaCLI {
+		if tool := status.Tool(remote.Platform); tool.Installed && tool.Authenticated {
+			args := []string{"repo", "clone", remote.CloneURL, destination, "--"}
+			args = append(args, flags...)
+			return commandSpec{Name: definition.CLI, Args: args}
+		}
 	}
 	args := []string{"clone"}
 	args = append(args, flags...)
@@ -85,23 +82,26 @@ func (a *App) ensureManagedRepository(id, platform, namespace, requested, visibi
 }
 
 func (a *App) managedRepositoryVisibility(platform, fullName string) (string, bool, error) {
-	var output string
-	var err error
-	switch platform {
-	case PlatformGitHub:
-		output, err = a.runQuiet("gh", "repo", "view", fullName, "--json", "visibility", "--jq", ".visibility")
-	case PlatformGitLab:
-		var project gitLabProject
-		project, output, err = a.fetchGitLabProject(fullName)
-		if err == nil {
-			return project.Visibility, true, nil
-		}
-	default:
+	definition := platformByID(platform)
+	if definition == nil || definition.RepoExists == nil {
 		return "", false, fmt.Errorf("不支持的平台")
 	}
+	return definition.RepoExists(a, fullName)
+}
+
+// looksLikeMissing reports whether CLI output indicates the repository does
+// not exist rather than a network or authentication problem.
+func looksLikeMissing(output string) bool {
+	lower := strings.ToLower(output)
+	return strings.Contains(lower, "404") ||
+		strings.Contains(lower, "not found") ||
+		strings.Contains(lower, "could not resolve to a repository")
+}
+
+func repoExistsViaGitHubAPI(app *App, fullName string) (string, bool, error) {
+	output, err := app.runQuiet("gh", "repo", "view", fullName, "--json", "visibility", "--jq", ".visibility")
 	if err != nil {
-		lower := strings.ToLower(output)
-		if strings.Contains(lower, "404") || strings.Contains(lower, "not found") || strings.Contains(lower, "could not resolve to a repository") {
+		if looksLikeMissing(output) {
 			return "", false, nil
 		}
 		return "", false, fmt.Errorf("目标仓库查询失败，请检查 CLI 登录状态和网络连接")
@@ -109,8 +109,19 @@ func (a *App) managedRepositoryVisibility(platform, fullName string) (string, bo
 	return strings.TrimSpace(output), true, nil
 }
 
-func (a *App) fetchGitLabProject(fullName string) (gitLabProject, string, error) {
-	output, err := a.runQuiet("glab", "api", "projects/"+url.PathEscape(fullName))
+func repoExistsViaGitLabAPI(app *App, fullName string) (string, bool, error) {
+	project, output, err := fetchGitLabProject(app, fullName)
+	if err != nil {
+		if looksLikeMissing(output) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("目标仓库查询失败，请检查 CLI 登录状态和网络连接")
+	}
+	return project.Visibility, true, nil
+}
+
+func fetchGitLabProject(app *App, fullName string) (gitLabProject, string, error) {
+	output, err := app.runQuiet("glab", "api", "projects/"+url.PathEscape(fullName))
 	if err != nil {
 		return gitLabProject{}, output, err
 	}
@@ -124,8 +135,8 @@ func (a *App) fetchGitLabProject(fullName string) (gitLabProject, string, error)
 	return project, output, nil
 }
 
-func (a *App) fetchGitLabProtectedBranches(fullName string) ([]gitLabProtectedBranch, error) {
-	output, err := a.runQuiet("glab", "api", "projects/"+url.PathEscape(fullName)+"/protected_branches?per_page=100")
+func fetchGitLabProtectedBranches(app *App, fullName string) ([]gitLabProtectedBranch, error) {
+	output, err := app.runQuiet("glab", "api", "projects/"+url.PathEscape(fullName)+"/protected_branches?per_page=100")
 	if err != nil {
 		return nil, err
 	}
@@ -144,47 +155,54 @@ func (a *App) setGitLabProtectedBranchForcePush(fullName, branch string, allowed
 	return nil
 }
 
-func (a *App) createManagedRepository(id, platform, fullName, visibility string) error {
-	visibilityFlag := "--" + visibility
-	switch platform {
-	case PlatformGitHub:
-		if err := a.runCommand(id, "gh", "repo", "create", fullName, visibilityFlag); err != nil {
-			return fmt.Errorf("GitHub 仓库创建失败: %w", err)
-		}
-	case PlatformGitLab:
-		if err := a.runCommand(id, "glab", "repo", "create", fullName, visibilityFlag, "--skipGitInit"); err != nil {
-			return fmt.Errorf("GitLab 仓库创建失败: %w", err)
-		}
-	default:
-		return fmt.Errorf("不支持的平台")
+func createRepoViaGitHubCLI(app *App, id, fullName, visibility string) error {
+	if err := app.runCommand(id, "gh", "repo", "create", fullName, "--"+visibility); err != nil {
+		return fmt.Errorf("GitHub 仓库创建失败: %w", err)
 	}
 	return nil
 }
 
-func (a *App) fetchManagedRemote(platform, fullName string) (RemoteSpec, error) {
-	parts := strings.Split(fullName, "/")
-	var cloneURL, webURL string
-	var err error
-	switch platform {
-	case PlatformGitHub:
-		cloneURL, err = a.runQuiet("gh", "api", "repos/"+fullName, "--jq", ".clone_url")
-		if err == nil {
-			webURL, err = a.runQuiet("gh", "api", "repos/"+fullName, "--jq", ".html_url")
-		}
-	case PlatformGitLab:
-		var project gitLabProject
-		project, _, err = a.fetchGitLabProject(fullName)
-		cloneURL = project.HTTPURLToRepo
-		webURL = project.WebURL
+func createRepoViaGitLabCLI(app *App, id, fullName, visibility string) error {
+	if err := app.runCommand(id, "glab", "repo", "create", fullName, "--"+visibility, "--skipGitInit"); err != nil {
+		return fmt.Errorf("GitLab 仓库创建失败: %w", err)
 	}
+	return nil
+}
+
+func fetchRepoViaGitHubAPI(app *App, fullName string) (string, string, error) {
+	cloneURL, err := app.runQuiet("gh", "api", "repos/"+fullName, "--jq", ".clone_url")
+	if err == nil {
+		var webURL string
+		webURL, err = app.runQuiet("gh", "api", "repos/"+fullName, "--jq", ".html_url")
+		return strings.TrimSpace(cloneURL), strings.TrimSpace(webURL), err
+	}
+	return "", "", err
+}
+
+func fetchRepoViaGitLabAPI(app *App, fullName string) (string, string, error) {
+	project, _, err := fetchGitLabProject(app, fullName)
+	return project.HTTPURLToRepo, project.WebURL, err
+}
+
+func (a *App) createManagedRepository(id, platform, fullName, visibility string) error {
+	definition := platformByID(platform)
+	if definition == nil || definition.CreateRepo == nil {
+		return fmt.Errorf("不支持的平台")
+	}
+	return definition.CreateRepo(a, id, fullName, visibility)
+}
+
+func (a *App) fetchManagedRemote(platform, fullName string) (RemoteSpec, error) {
+	definition := platformByID(platform)
+	if definition == nil || definition.FetchRepo == nil {
+		return RemoteSpec{}, fmt.Errorf("不支持的平台")
+	}
+	parts := strings.Split(fullName, "/")
+	cloneURL, webURL, err := definition.FetchRepo(a, fullName)
 	if err != nil {
 		return RemoteSpec{}, fmt.Errorf("读取目标仓库信息失败: %w", err)
 	}
-	host := "github.com"
-	if platform == PlatformGitLab {
-		host = "gitlab.com"
-	}
-	remote := makeRemote(platform, host, parts, strings.TrimSpace(cloneURL))
+	remote := makeRemote(platform, definition.Host, parts, strings.TrimSpace(cloneURL))
 	remote.WebURL = strings.TrimSpace(webURL)
 	return remote, nil
 }

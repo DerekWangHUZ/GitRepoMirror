@@ -1,5 +1,5 @@
 import { icons } from "./icons.js";
-import { escapeHTML, formatTime, platformLabel } from "./utils.js";
+import { escapeHTML, formatTime, platformLabel, platformMeta } from "./utils.js";
 
 const platformIcon = (platform) => icons[platform] || icons.generic;
 
@@ -58,16 +58,20 @@ export function loginButton(tool = {}, platform) {
 }
 
 export function targetFields(platform, env) {
-  const tool = platform === "github" ? env.github : env.gitlab;
-  const managed =
-    platform !== "generic" && Boolean(tool?.installed && tool?.authenticated);
+  const meta = platformMeta(platform);
+  const tool = meta ? env[platform] : undefined;
+  const managed = Boolean(meta?.cli) && Boolean(tool?.installed && tool?.authenticated);
   if (managed) {
+    const namespaceHint = meta.namespaceHint || "用户、组织或群组";
+    const visibilityField = meta.fixedVisibility
+      ? `<label>目标可见性<span>由项目自身的可见性设置决定</span><input value="跟随项目" disabled></label>`
+      : `<label>目标可见性<select name="visibility"><option value="private">Private</option><option value="internal">Internal</option><option value="public">Public</option></select></label>`;
     return {
       managed,
-      html: `<div class="two-col"><label>目标命名空间 <span>用户、组织或群组</span><input name="targetNamespace" value="${escapeHTML(tool.login || "")}" required placeholder="team/platform"></label><label>自定义目标名称 <span>留空则使用源仓库名</span><input name="targetName" placeholder="my-repository-mirror"></label></div><div class="two-col"><label>目标可见性<select name="visibility"><option value="private">Private</option><option value="internal">Internal</option><option value="public">Public</option></select></label><label>同名仓库处理<select name="conflictPolicy"><option value="error">询问并停止</option><option value="associate">关联已有仓库</option><option value="rename">自动添加数字后缀</option></select></label></div>`,
+      html: `<div class="two-col"><label>目标命名空间 <span>${escapeHTML(namespaceHint)}</span><input name="targetNamespace" value="${escapeHTML(tool.login || "")}" required placeholder="team/platform"></label><label>自定义目标名称 <span>留空则使用源仓库名</span><input name="targetName" placeholder="my-repository-mirror"></label></div><div class="two-col">${visibilityField}<label>同名仓库处理<select name="conflictPolicy"><option value="error">询问并停止</option><option value="associate">关联已有仓库</option><option value="rename">自动添加数字后缀</option></select></label></div>`,
     };
   }
-  const cli = platform === "github" ? "gh" : "glab";
+  const cli = meta?.cli;
   const message =
     platform === "generic"
       ? "请先在目标平台创建仓库，然后填写完整推送 URL。"

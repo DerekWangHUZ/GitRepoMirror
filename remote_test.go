@@ -16,7 +16,12 @@ func TestParseRemote(t *testing.T) {
 		{"github scp", "git@github.com:octo/example.git", PlatformGitHub, "github.com", "octo", "example"},
 		{"gitlab subgroup", "https://gitlab.com/team/subgroup/example.git", PlatformGitLab, "gitlab.com", "team/subgroup", "example"},
 		{"gitlab ssh", "ssh://git@gitlab.com/team/example.git", PlatformGitLab, "gitlab.com", "team", "example"},
-		{"generic https", "https://codeberg.org/team/example.git", PlatformGeneric, "codeberg.org", "team", "example"},
+		{"gitee https", "https://gitee.com/team/example.git", PlatformGitee, "gitee.com", "team", "example"},
+		{"codeberg https", "https://codeberg.org/team/example.git", PlatformCodeberg, "codeberg.org", "team", "example"},
+		{"codeberg scp", "git@codeberg.org:team/example.git", PlatformCodeberg, "codeberg.org", "team", "example"},
+		{"azure https", "https://dev.azure.com/org/project/_git/example", PlatformAzureDevOps, "dev.azure.com", "org/project", "example"},
+		{"azure scp", "git@ssh.dev.azure.com:v3/org/project/example", PlatformAzureDevOps, "ssh.dev.azure.com", "org/project", "example"},
+		{"generic https", "https://code.example/team/example.git", PlatformGeneric, "code.example", "team", "example"},
 		{"generic scp", "git@code.example:team/example.git", PlatformGeneric, "code.example", "team", "example"},
 	}
 	for _, test := range tests {
@@ -59,6 +64,7 @@ func TestValidateManagedTarget(t *testing.T) {
 		{PlatformGitHub, "company/..", "repo", "private"},
 		{PlatformGitLab, "company", "bad/name", "private"},
 		{PlatformGitHub, "company", "repo", "secret"},
+		{PlatformGitHub, "company", "repo", "internal"},
 	}
 	for _, item := range invalid {
 		if err := validateManagedTarget(item.platform, item.namespace, item.name, item.visibility); err == nil {

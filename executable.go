@@ -16,7 +16,10 @@ func findExecutable(name string) (string, error) {
 		return "", fmt.Errorf("未找到命令: %s", name)
 	}
 	programFiles := os.Getenv("ProgramFiles")
+	programFilesX86 := os.Getenv("ProgramFiles(x86)")
 	localAppData := os.Getenv("LOCALAPPDATA")
+	appData := os.Getenv("APPDATA")
+	userProfile := os.Getenv("USERPROFILE")
 	systemDrive := os.Getenv("SystemDrive")
 	if systemDrive == "" {
 		systemDrive = "C:"
@@ -48,6 +51,26 @@ func findExecutable(name string) (string, error) {
 			filepath.Join(standardProgramFiles, "glab", "glab.exe"),
 			filepath.Join(localAppData, "glab", "glab.exe"),
 			filepath.Join(localAppData, "Programs", "glab", "glab.exe"),
+		}
+	case "gitee":
+		candidates = []string{
+			filepath.Join(appData, "npm", "gitee.cmd"),
+			filepath.Join(programFiles, "Gitee CLI", "gitee.exe"),
+			filepath.Join(standardProgramFiles, "Gitee CLI", "gitee.exe"),
+			filepath.Join(localAppData, "Programs", "gitee", "gitee.exe"),
+		}
+	case "fj":
+		candidates = []string{
+			filepath.Join(userProfile, "Documents", "Application", "fj.exe"),
+			filepath.Join(userProfile, ".cargo", "bin", "fj.exe"),
+			filepath.Join(localAppData, "Programs", "forgejo-cli", "fj.exe"),
+			filepath.Join(userProfile, "scoop", "shims", "fj.exe"),
+		}
+	case "az":
+		candidates = []string{
+			filepath.Join(programFiles, "Microsoft SDKs", "Azure", "CLI2", "wbin", "az.cmd"),
+			filepath.Join(standardProgramFiles, "Microsoft SDKs", "Azure", "CLI2", "wbin", "az.cmd"),
+			filepath.Join(programFilesX86, "Microsoft SDKs", "Azure", "CLI2", "wbin", "az.cmd"),
 		}
 	default:
 		return "", fmt.Errorf("未找到命令: %s", name)
