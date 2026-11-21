@@ -1,0 +1,211 @@
+/* ============================================================================
+   来源：macUI-SolidGlass 模板本机副本（web/src/macos/tokens.css），复制日期 2026-11-22。
+   token 禁止手工微调 —— 一切取值改动必须回到模板仓库进行。
+
+   macOS 层 —— 几何、系统色与 Apple 强调色（Accent Color）token
+   ---------------------------------------------------------------------------
+   颜色与字体：Apple HIG 官方资料值（Typography「macOS built-in text styles」表、
+   Color 官方 RGB、macOS tracking values 表），沿用 macUI 项目的取值。
+
+   材质：不在这里定义。玻璃由 Solid Glass 的 solid-glass.css 提供
+   （panel / card / popover 三种厚度），本文件只补 Solid Glass 没有的那部分：
+   macOS 特有的系统色、8 色 Apple 强调色映射、同心圆角几何、让位尺寸。
+
+   规则：凡 font-size 大于其行框的元素必须显式 line-height（防字形裁切）。
+   ========================================================================== */
+
+:root {
+  /* ---------- 文本样式（HIG Typography「macOS built-in text styles」） ---------- */
+  --font-large-title-size: 26px;   --font-large-title-lh: 32px;
+  --font-title1-size: 22px;        --font-title1-lh: 26px;
+  --font-title2-size: 17px;        --font-title2-lh: 22px;
+  --font-title3-size: 15px;        --font-title3-lh: 20px;
+  --font-headline-size: 13px;      --font-headline-lh: 16px;
+  --font-body-size: 13px;          --font-body-lh: 16px;
+  --font-callout-size: 12px;       --font-callout-lh: 15px;
+  --font-subheadline-size: 11px;   --font-subheadline-lh: 14px;
+  --font-footnote-size: 10px;      --font-footnote-lh: 13px;
+  --font-caption1-size: 10px;      --font-caption1-lh: 13px;
+
+  /* tracking（HIG macOS tracking values 表） */
+  --track-10: 0.12px;
+  --track-11: 0.06px;
+  --track-12: 0px;
+  --track-13: -0.08px;
+  --track-15: -0.23px;
+  --track-17: -0.43px;
+  --track-22: -0.26px;
+  --track-26: 0.15px;
+
+  /* ---------- 系统色（浅色，HIG 官方 RGB） ---------- */
+  --sys-blue: #0088ff;
+  --sys-green: #34c759;
+  --sys-red: #ff383c;
+  --sys-orange: #ff8d28;
+  --sys-yellow: #ffcc00;
+  --sys-pink: #ff2d55;
+  --sys-purple: #cb30e0;
+  --sys-indigo: #6155f5;
+  --sys-teal: #00c3d0;
+  --sys-mint: #00c8b3;
+  --sys-cyan: #00c0e8;
+  --sys-brown: #ac7f5e;
+  --sys-gray: #8e8e93;
+  --sys-gray2: #aeaeb2;
+  --sys-gray3: #c7c7cc;
+  --sys-gray4: #d1d1d6;
+  --sys-gray5: #e5e5ea;
+  --sys-gray6: #f2f2f7;
+
+  /* ---------- 红绿灯（macOS 窗口控件官方色） ---------- */
+  --tl-close: #ff5f57;
+  --tl-min: #febc2e;
+  --tl-max: #28c840;
+  --tl-close-glyph: rgba(88, 0, 0, 0.66);
+  --tl-min-glyph: rgba(93, 54, 0, 0.68);
+  --tl-max-glyph: rgba(6, 91, 22, 0.7);
+  --tl-size: 13px;
+  --tl-gap: 8px;
+
+  /* ---------- 默认强调色（Apple Blue，不污染 --accent 悬停灰） ---------- */
+  --mac-accent: var(--sys-blue);
+  --mac-accent-ink: var(--sys-blue);
+  --mac-accent-fg: #ffffff;
+
+  /* ---------- 同心圆角几何（圆心统一为 (32,32)） ---------- */
+  --window-radius: 32px;
+  --sidebar-radius: 20px;
+  --topbar-radius: 24px;
+
+  /* ---------- 布局尺寸 ---------- */
+  --sidebar-w: 220px;
+  --sidebar-gap: 12px;
+  --content-x: 32px;
+  --content-right: 24px;
+  --page-max: 1180px;
+  --toolbar-h: 52px;
+  --chrome-h: 40px;
+
+  /* ---------- 动效 ---------- */
+  --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --dur-fast: 0.12s;
+  --dur: 0.18s;
+  --dur-slow: 0.28s;
+
+  color-scheme: light;
+}
+
+.dark {
+  --sys-blue: #0091ff;
+  --sys-green: #30d158;
+  --sys-red: #ff4245;
+  --sys-orange: #ff9230;
+  --sys-yellow: #ffd600;
+  --sys-pink: #ff375f;
+  --sys-purple: #db34f2;
+  --sys-indigo: #6d7cff;
+  --sys-teal: #00d2e0;
+  --sys-mint: #00dac3;
+  --sys-cyan: #3cd3fe;
+  --sys-brown: #b78a66;
+  --sys-gray2: #636366;
+  --sys-gray3: #48484a;
+  --sys-gray4: #3a3a3c;
+  --sys-gray5: #2c2c2e;
+  --sys-gray6: #1c1c1e;
+
+  color-scheme: dark;
+}
+
+/* ============================================================================
+   Apple 8 色强调色映射（html[data-accent]）
+   - 保持 Solid Glass 大面积玻璃容器（--background / --panel / --card / --popover / --sidebar）
+     与悬停浅灰（--accent）纯净中性，仅映射主交互控件、焦点与强调原语。
+   - graphite 保留 Solid Glass 原版黑白灰单色设计。
+   ========================================================================== */
+
+html[data-accent="blue"] {
+  --mac-accent: var(--sys-blue);
+  --mac-accent-ink: var(--sys-blue);
+  --mac-accent-fg: #ffffff;
+}
+html[data-accent="purple"] {
+  --mac-accent: var(--sys-purple);
+  --mac-accent-ink: var(--sys-purple);
+  --mac-accent-fg: #ffffff;
+}
+html[data-accent="pink"] {
+  --mac-accent: var(--sys-pink);
+  --mac-accent-ink: var(--sys-pink);
+  --mac-accent-fg: #ffffff;
+}
+html[data-accent="red"] {
+  --mac-accent: var(--sys-red);
+  --mac-accent-ink: var(--sys-red);
+  --mac-accent-fg: #ffffff;
+}
+html[data-accent="orange"] {
+  --mac-accent: var(--sys-orange);
+  --mac-accent-ink: #c75a00;
+  --mac-accent-fg: #ffffff;
+}
+html.dark[data-accent="orange"] {
+  --mac-accent-ink: var(--sys-orange);
+}
+html[data-accent="yellow"] {
+  --mac-accent: var(--sys-yellow);
+  --mac-accent-ink: #9c7400;
+  --mac-accent-fg: oklch(0.18 0 0);
+}
+html.dark[data-accent="yellow"] {
+  --mac-accent-ink: var(--sys-yellow);
+}
+html[data-accent="green"] {
+  --mac-accent: var(--sys-green);
+  --mac-accent-ink: #1e8e3e;
+  --mac-accent-fg: #ffffff;
+}
+html.dark[data-accent="green"] {
+  --mac-accent-ink: var(--sys-green);
+}
+
+/* 彩色强调色统一下发给 Solid Glass 主控件 token */
+html:not([data-accent="graphite"]) {
+  --primary: var(--mac-accent);
+  --primary-foreground: var(--mac-accent-fg);
+  --primary-rim: oklch(1 0 0 / 34%);
+  --primary-under: oklch(0 0 0 / 32%);
+  --primary-inner: oklch(1 0 0 / 10%);
+  --primary-edge: oklch(0 0 0 / 26%);
+  --brand: var(--mac-accent);
+  --brand-foreground: var(--mac-accent-fg);
+  --brand-muted: color-mix(in oklch, var(--mac-accent) 14%, transparent);
+  --link: var(--mac-accent-ink);
+  --ring: color-mix(in oklch, var(--mac-accent) 62%, transparent);
+  --focus-line: color-mix(in oklch, var(--mac-accent) 72%, transparent);
+  --sidebar-primary: var(--mac-accent);
+  --sidebar-primary-foreground: var(--mac-accent-fg);
+}
+
+html.dark:not([data-accent="graphite"]) {
+  --primary-rim: oklch(1 0 0 / 32%);
+  --primary-under: oklch(0 0 0 / 36%);
+  --primary-inner: oklch(1 0 0 / 8%);
+  --primary-edge: oklch(1 0 0 / 24%);
+}
+
+/* 石墨（Graphite）：回归 Solid Glass 原版中性单色 */
+html[data-accent="graphite"] {
+  --mac-accent: var(--foreground);
+  --mac-accent-ink: var(--foreground);
+  --mac-accent-fg: var(--primary-foreground);
+}
+
+/* 无障碍 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0.01s;
+    --dur: 0.01s;
+    --dur-slow: 0.01s;
+  }
+}

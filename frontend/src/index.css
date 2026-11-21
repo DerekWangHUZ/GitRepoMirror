@@ -1,0 +1,24 @@
+/* ============================================================================
+   导入顺序有讲究（沿用 macUI-SolidGlass 模板本机副本 web/src/index.css 的结构，
+   复制日期 2026-11-22，token 禁止手工微调）：
+     1. Tailwind 4        —— 基础层与工具类
+     2. tw-animate-css    —— shadcn 的动画工具类
+     3. skin/shadcn-tailwind.css —— shadcn 自己的样式表（vendor 副本）
+     4. 字体              —— Geist / Geist Mono（按本仓依赖 @fontsource-variable 引入）
+     5. skin/solid-glass.css —— 材质：颜色、三种厚度、唯一状态、动效
+     6. skin/macos/       —— macOS 骨架：窗口、红绿灯、悬浮侧栏
+     7. app.css           —— GitRepoMirror 业务视图（镜像仓库/日志/设置/控制台）
+
+   Solid Glass 定义了 shadcn 的同名颜色变量（--background / --card / --popover …），
+   所以 shadcn init 写的那套 :root 变量一律不要引入，会打架。
+   ========================================================================== */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "./skin/shadcn-tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "./skin/solid-glass.css";
+@import "./skin/macos/tokens.css";
+@import "./skin/macos/chrome.css";
+@import "./app.css";

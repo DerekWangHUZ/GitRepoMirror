@@ -1,23 +1,28 @@
 import js from "@eslint/js";
+import globals from "globals";
+import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
   { ignores: ["dist/**", "node_modules/**", "wailsjs/**", "test-results/**"] },
   js.configs.recommended,
   {
-    files: ["src/**/*.js", "tests/**/*.js"],
+    files: ["src/**/*.{js,jsx}", "tests/**/*.{js,jsx}"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
-      globals: {
-        document: "readonly",
-        window: "readonly",
-        URLSearchParams: "readonly",
-        FormData: "readonly",
-        MouseEvent: "readonly",
-        Promise: "readonly",
-        setTimeout: "readonly",
-        Error: "readonly",
+      parserOptions: {
+        ecmaFeatures: { jsx: true },
       },
+      globals: {
+        ...globals.browser,
+      },
+    },
+    plugins: {
+      "react-hooks": reactHooks,
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+      "no-unused-vars": ["error", { varsIgnorePattern: "^React$" }],
     },
   },
 ];

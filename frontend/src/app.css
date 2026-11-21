@@ -1,0 +1,806 @@
+/* ============================================================================
+   GitRepoMirror 业务视图层。
+   材质一律引用 Solid Glass 的三档玻璃（panel / card / popover）与
+   macOS 骨架 token；本文件只描述业务布局，不另造玻璃样式。
+   ========================================================================== */
+
+/* ---- 页面骨架 ---- */
+
+.grm-main {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.grm-content {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.grm-view {
+  height: 100%;
+  overflow-y: auto;
+  /* 让位：悬浮玻璃侧栏 (fixed) 占据左侧，内容区参照 chrome.css 的 page-inner 契约右移 */
+  padding: 34px clamp(30px, 4.5vw, 62px) 100px;
+  padding-left: calc(var(--sidebar-w) + var(--sidebar-gap) + var(--content-x));
+  transition: padding-bottom 0.28s cubic-bezier(0.25, 0.8, 0.25, 1);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* 实时输出面板展开时（高 210px）为其让出空间，避免底部内容被遮挡 */
+.grm-main:has(.grm-console:not(.collapsed)) .grm-view {
+  padding-bottom: 274px;
+}
+
+.grm-page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.grm-page-head h1 {
+  margin: 0 0 5px;
+  font-size: var(--font-title1-size);
+  line-height: var(--font-title1-lh);
+  letter-spacing: var(--track-22);
+  font-weight: 700;
+}
+
+.grm-page-head p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--font-callout-size);
+  line-height: var(--font-callout-lh);
+}
+
+/* ---- 侧栏业务部分 ---- */
+
+.grm-sidebar-identity {
+  display: grid;
+  gap: 10px;
+  padding: 2px 16px 14px;
+}
+
+.grm-sidebar-label {
+  padding: 10px 10px 6px 11px;
+  color: var(--muted-foreground);
+  font-size: var(--font-callout-size);
+  line-height: var(--font-callout-lh);
+  font-weight: 600;
+  letter-spacing: var(--track-12);
+}
+
+.grm-sidebar-footer {
+  padding: 8px 10px 10px 12px;
+  border-top: 1px solid var(--sidebar-border);
+}
+
+.grm-env-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: var(--glass-control);
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    0 0 0 1px var(--glass-edge);
+  color: var(--muted-foreground);
+  font-size: var(--font-footnote-size);
+  line-height: var(--font-footnote-lh);
+  font-weight: 600;
+}
+
+.grm-env-pill span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grm-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--sys-yellow);
+}
+
+.grm-dot.ok {
+  background: var(--sys-green);
+}
+
+.grm-dot.bad {
+  background: var(--sys-red);
+}
+
+/* 环境卡片：悬浮侧栏底部的最薄玻璃 */
+.grm-env-card {
+  margin: 0 10px 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background-color: var(--panel);
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    0 0 0 1px var(--glass-edge);
+  font-size: var(--font-footnote-size);
+  line-height: var(--font-footnote-lh);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.grm-env-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  color: var(--muted-foreground);
+}
+
+.grm-env-row:first-child {
+  margin-top: 0;
+}
+
+.grm-env-row b {
+  margin-left: auto;
+  font-size: var(--font-footnote-size);
+  font-weight: 550;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grm-env-title {
+  margin: 0 0 4px;
+  color: var(--foreground);
+  font-weight: 650;
+}
+
+.grm-env-title span {
+  flex: 1;
+}
+
+.grm-login-actions {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+/* ---- 仓库列表 ---- */
+
+.grm-head-actions {
+  display: flex;
+  gap: 9px;
+}
+
+.grm-repo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 14px;
+}
+
+.grm-repo-card {
+  border-radius: var(--radius-lg);
+  background-color: var(--card);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    inset 0 0 0 1px var(--glass-inner),
+    0 0 0 1px var(--glass-edge),
+    0 1px 2px var(--glass-contact),
+    0 12px 32px -14px var(--glass-shade);
+  padding: 18px;
+  transition:
+    transform 0.18s,
+    box-shadow 0.18s;
+}
+
+.grm-repo-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    inset 0 0 0 1px var(--glass-inner),
+    0 0 0 1px var(--glass-edge),
+    0 1px 2px var(--glass-contact),
+    0 18px 40px -16px var(--glass-shade);
+}
+
+.grm-repo-card.failed {
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    inset 0 0 0 1px color-mix(in oklch, var(--sys-red) 18%, transparent),
+    0 0 0 1px color-mix(in oklch, var(--sys-red) 14%, transparent),
+    0 1px 2px var(--glass-contact),
+    0 12px 32px -14px var(--glass-shade);
+}
+
+.grm-repo-top {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+}
+
+.grm-repo-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: var(--primary);
+  box-shadow:
+    inset 0 1px 0 var(--primary-rim),
+    inset 0 -1px 0 var(--primary-under);
+}
+
+.grm-repo-icon[data-platform="gitlab"] {
+  background: linear-gradient(145deg, #ef6b35, #d94720);
+}
+
+.grm-repo-icon[data-platform="gitee"] {
+  background: linear-gradient(145deg, #d5453c, #a4231c);
+}
+
+.grm-repo-icon[data-platform="codeberg"] {
+  background: linear-gradient(145deg, #4a9be0, #2185d0);
+}
+
+.grm-repo-icon[data-platform="azuredevops"] {
+  background: linear-gradient(145deg, #35a3c4, #1067a8);
+}
+
+.grm-repo-icon[data-platform="generic"] {
+  background: linear-gradient(145deg, #5e6570, #30343a);
+}
+
+.grm-repo-icon svg {
+  width: 23px;
+  height: 23px;
+}
+
+.grm-repo-title {
+  min-width: 0;
+  flex: 1;
+}
+
+.grm-repo-title h3 {
+  margin: 1px 0 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  letter-spacing: -0.015em;
+  font-weight: 600;
+}
+
+.grm-repo-target {
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--link);
+  font-size: var(--font-footnote-size);
+  line-height: var(--font-footnote-lh);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.grm-repo-target svg {
+  width: 11px;
+  flex: 0 0 auto;
+}
+
+.grm-repo-meta {
+  display: flex;
+  gap: 24px;
+  padding: 16px 0 14px;
+  margin-top: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.grm-repo-meta span {
+  min-width: 0;
+  color: var(--muted-foreground);
+  font-size: var(--font-footnote-size);
+  line-height: var(--font-footnote-lh);
+}
+
+.grm-repo-meta b {
+  display: block;
+  color: var(--foreground);
+  margin-top: 4px;
+  font-size: var(--font-footnote-size);
+  font-weight: 580;
+  white-space: nowrap;
+}
+
+.grm-error-line {
+  color: var(--sys-red);
+  font-size: var(--font-footnote-size);
+  margin-top: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.grm-repo-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 13px;
+}
+
+.grm-sync-button {
+  flex: 1;
+}
+
+/* 状态徽标：沿用 macOS 系统色 + 唯一状态玻璃 */
+.grm-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--sys-green) 10%, transparent);
+  color: var(--sys-green);
+  font-size: var(--font-footnote-size);
+  line-height: var(--font-footnote-lh);
+  font-weight: 650;
+  flex: none;
+}
+
+.grm-status .grm-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--sys-green);
+}
+
+.grm-status.syncing {
+  color: var(--sys-yellow);
+  background: color-mix(in oklch, var(--sys-yellow) 12%, transparent);
+}
+
+.grm-status.syncing .grm-dot {
+  background: var(--sys-yellow);
+  animation: grm-pulse 1s infinite;
+}
+
+.grm-status.failed {
+  color: var(--sys-red);
+  background: color-mix(in oklch, var(--sys-red) 10%, transparent);
+}
+
+.grm-status.failed .grm-dot {
+  background: var(--sys-red);
+}
+
+/* 空状态 */
+.grm-empty {
+  height: calc(100% - 90px);
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.grm-empty-visual {
+  position: relative;
+  margin-bottom: 22px;
+}
+
+.grm-empty-visual > div {
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+  border-radius: 22px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow:
+    inset 0 1px 0 var(--primary-rim),
+    inset 0 -1px 0 var(--primary-under),
+    0 14px 28px var(--glass-shade);
+}
+
+.grm-empty-visual > div svg {
+  width: 42px;
+  height: 42px;
+}
+
+.grm-empty-visual span {
+  position: absolute;
+  right: -10px;
+  bottom: -8px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 4px solid var(--background);
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.grm-empty-visual span svg {
+  width: 14px;
+}
+
+.grm-empty h2 {
+  margin: 0 0 7px;
+  font-size: var(--font-title2-size);
+  line-height: var(--font-title2-lh);
+  font-weight: 700;
+  letter-spacing: var(--track-17);
+}
+
+.grm-empty p {
+  color: var(--muted-foreground);
+  margin: 0 0 20px;
+  font-size: var(--font-callout-size);
+  line-height: var(--font-callout-lh);
+}
+
+/* ---- 表单 ---- */
+
+.grm-label {
+  display: block;
+  color: var(--foreground);
+  font-size: var(--font-callout-size);
+  line-height: var(--font-callout-lh);
+  font-weight: 600;
+}
+
+.grm-label > span {
+  float: right;
+  color: var(--muted-foreground);
+  font-size: var(--font-footnote-size);
+  line-height: var(--font-footnote-lh);
+  font-weight: 400;
+}
+
+.grm-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.grm-check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px;
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow:
+    inset 0 1px 0 var(--glass-inner),
+    0 0 0 1px var(--glass-edge);
+  cursor: pointer;
+}
+
+.grm-check-row > span {
+  float: none;
+  flex: 1;
+}
+
+.grm-check-row strong {
+  display: block;
+  font-size: var(--font-callout-size);
+}
+
+.grm-check-row small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted-foreground);
+  font-size: var(--font-footnote-size);
+  line-height: var(--font-footnote-lh);
+  font-weight: 400;
+}
+
+/* ---- 设置页 ---- */
+
+.grm-settings-form {
+  max-width: 660px;
+}
+
+.grm-setting-section {
+  padding: 20px 22px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-lg);
+  background-color: var(--card);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    inset 0 0 0 1px var(--glass-inner),
+    0 0 0 1px var(--glass-edge),
+    0 1px 2px var(--glass-contact);
+}
+
+.grm-setting-section h3 {
+  margin: 0 0 18px;
+  font-size: var(--font-headline-size);
+  line-height: var(--font-headline-lh);
+  font-weight: 650;
+}
+
+.grm-setting-section .grm-label + .grm-label,
+.grm-setting-section .grm-check-row {
+  margin-top: 16px;
+}
+
+/* ---- 日志 ---- */
+
+.grm-log-panel {
+  background: var(--popover);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    0 0 0 1px var(--popover-edge),
+    0 24px 60px -18px var(--glass-shade);
+  min-height: 420px;
+  border-radius: var(--radius-lg);
+  padding: 14px 0;
+  overflow: auto;
+  color: var(--popover-foreground);
+}
+
+.grm-log-line {
+  display: flex;
+  gap: 12px;
+  padding: 3px 14px;
+  font:
+    11px/1.55 "Geist Mono Variable",
+    "Cascadia Mono",
+    Consolas,
+    monospace;
+}
+
+.grm-log-line time {
+  flex: 0 0 55px;
+  color: var(--muted-foreground);
+}
+
+.grm-log-line span {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.grm-log-line.command span {
+  color: var(--sys-blue);
+}
+
+.grm-log-line.stderr span,
+.grm-log-line.error span {
+  color: var(--sys-red);
+}
+
+.grm-log-line.warning span {
+  color: var(--sys-orange);
+}
+
+.grm-log-empty {
+  padding: 30px;
+  text-align: center;
+  color: var(--muted-foreground);
+  font-size: var(--font-footnote-size);
+  line-height: var(--font-footnote-lh);
+}
+
+/* ---- 底部可折叠实时控制台 ---- */
+
+.grm-console {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 210px;
+  color: var(--popover-foreground);
+  background: var(--popover);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    0 0 0 1px var(--popover-edge),
+    0 -18px 40px -18px var(--glass-shade);
+  transition: transform 0.28s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.grm-console.collapsed {
+  transform: translateY(174px);
+}
+
+.grm-console-head {
+  width: 100%;
+  height: 36px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  color: var(--muted-foreground);
+  background: var(--glass-control);
+  font-size: var(--font-footnote-size);
+  line-height: var(--font-footnote-lh);
+  cursor: pointer;
+  gap: 7px;
+}
+
+.grm-console-head .grm-console-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  text-align: left;
+}
+
+.grm-console-head i {
+  margin-left: 14px;
+  font-style: normal;
+  transition: transform 0.2s;
+}
+
+.grm-console:not(.collapsed) .grm-console-head i {
+  transform: rotate(180deg);
+}
+
+.grm-console-head svg {
+  width: 14px;
+  height: 14px;
+}
+
+.grm-console-body {
+  height: 174px;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.grm-console-body .grm-log-line {
+  font-size: 10px;
+  padding-top: 1px;
+  padding-bottom: 1px;
+}
+
+/* ---- 创建镜像 Modal ---- */
+
+.grm-dialog-content {
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  width: min(580px, calc(100vw - 60px));
+}
+
+.grm-dialog-content > .grm-label,
+.grm-dialog-content > .grm-two-col {
+  margin-top: 15px;
+}
+
+.grm-dialog-content .grm-two-col .grm-label > span {
+  float: none;
+  display: block;
+  margin-top: 2px;
+}
+
+.grm-dialog-content .grm-check-row span {
+  float: none;
+}
+
+.grm-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-top: 21px;
+}
+
+.grm-steps span {
+  padding-top: 10px;
+  border-top: 3px solid var(--glass-state);
+  color: var(--muted-foreground);
+  font-size: var(--font-footnote-size);
+  line-height: var(--font-footnote-lh);
+  text-align: center;
+}
+
+.grm-steps span.active,
+.grm-steps span.running {
+  border-color: var(--mac-accent);
+  color: var(--mac-accent-ink);
+}
+
+.grm-steps span.done {
+  border-color: var(--sys-green);
+  color: var(--sys-green);
+}
+
+.grm-steps span.failed {
+  border-color: var(--sys-red);
+  color: var(--sys-red);
+}
+
+.grm-target-hint {
+  margin-top: 14px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: var(--font-footnote-size);
+  line-height: 1.5;
+}
+
+.grm-target-hint.warning {
+  color: var(--sys-orange);
+  background: color-mix(in oklch, var(--sys-orange) 10%, transparent);
+}
+
+.grm-target-hint span {
+  display: block;
+}
+
+.grm-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 22px;
+}
+
+/* ---- 确认框（沿用旧的轻量视觉，挂 popover 玻璃） ---- */
+
+.grm-confirm-content {
+  width: 420px;
+  max-width: calc(100vw - 48px);
+}
+
+.grm-confirm-content .grm-dialog-footer {
+  margin-top: 16px;
+}
+
+/* ---- 通用图标尺寸（迁移自旧 style.css 的全局 svg 规则） ---- */
+
+.grm-svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.grm-svg.fill {
+  fill: currentColor;
+  stroke: none;
+}
+
+@keyframes grm-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (max-width: 940px) {
+  :root {
+    --sidebar-w: 190px;
+  }
+
+  .grm-repo-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 窄窗（≤860px）按 chrome.css 契约：侧栏隐藏，内容恢复左右对称留白 */
+@media (max-width: 860px) {
+  .grm-view {
+    padding-left: var(--content-x);
+  }
+}

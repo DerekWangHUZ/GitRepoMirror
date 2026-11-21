@@ -1,0 +1,848 @@
+/* ============================================================================
+   来源：macUI-SolidGlass 模板本机副本（web/src/macos/chrome.css），复制日期 2026-11-22。
+   token 禁止手工微调 —— 一切取值改动必须回到模板仓库进行。
+   （本仓适配：#root 选择器改挂 #app；data-wails-drag 拖动区为 GitRepoMirror Wails 桥接补充。）
+
+   macOS 层 —— 窗口外壳与导航
+   ---------------------------------------------------------------------------
+   这一层只管 macOS 原生 App 的界面骨架：窗口圆角、红绿灯、真悬浮玻璃侧栏、
+   自绘悬浮滚动条、工具栏与内容让位、全幅货架滑入侧栏下方契约。材质本身来自 Solid Glass：
+
+     · 侧栏      → bg-sidebar   （最薄的一档：panel 同级）
+     · 页面分栏  → glass-panel  （最薄）
+     · 卡片      → bg-card      （中档）
+     · 菜单弹窗  → bg-popover   （最厚）
+
+   Solid Glass 的铁律之一是「厚度即纵深」，所以这里不另造玻璃样式，
+   只引用它已有的三档，按 macOS 的界面惯例分配到不同位置。
+   ========================================================================== */
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+
+  button {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  ul {
+    list-style: none;
+  }
+
+  svg {
+    display: block;
+  }
+
+  /* 放在 @layer base 内，确保不覆盖 Tailwind v4 utilities 层的 outline-hidden / outline-none */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+body {
+  font-family: "Geist Variable", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: var(--font-body-size);
+  line-height: var(--font-body-lh);
+  letter-spacing: var(--track-13);
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+/* 命令面板搜索框：外层 input-group 承担焦点外框，内层 input 保持零 outline、不遮挡左侧搜索图标 */
+[data-slot="command-input-wrapper"] [data-slot="input-group"] {
+  gap: 6px;
+  padding-right: 8px;
+  border-color: var(--field-edge);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+[data-slot="command-input-wrapper"] [data-slot="input-group"]:focus-within {
+  border-color: var(--focus-line);
+  box-shadow: none;
+}
+
+[data-slot="command-input"]:focus,
+[data-slot="command-input"]:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ================= 窗口外壳 ================= */
+
+/* 桌面版里窗口是无边框的，圆角由 Go 侧的 SetWindowRgn 裁出；
+   网页版没有系统窗口，就由这一层把整个视口当作窗口来裁。 */
+.window {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--background);
+}
+
+@media (min-width: 861px) {
+  .window {
+    /* 32px 圆角，圆心 (32,32) */
+    border-radius: var(--window-radius);
+  }
+
+  .window.is-maximized {
+    border-radius: 0;
+  }
+}
+
+/* 窗口外缘 1px 描边：使用 border-radius: inherit 保持直线与圆角一致；
+   桌面端由 desktop.css 统一用 body::after 绘制唯一外框，避免双层叠加。 */
+.window::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+  border-radius: inherit;
+  border: 1px solid oklch(0.2 0 0 / 15%);
+}
+
+.dark .window::after {
+  border-color: oklch(1 0 0 / 15%);
+}
+
+.window.is-maximized::after {
+  border-radius: 0;
+  border-color: transparent;
+}
+
+/* ================= 红绿灯 ================= */
+
+/* 逐像素复刻 macUI 项目的窗口控件：
+   13px 直径、间距 8px、悬停显字形、灯圆心嵌进 32px 圆角弧。 */
+.traffic {
+  display: flex;
+  align-items: center;
+  gap: var(--tl-gap);
+  flex: none;
+}
+
+.light {
+  position: relative;
+  width: var(--tl-size);
+  height: var(--tl-size);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 0.5px solid rgba(0, 0, 0, 0.12);
+  padding: 0;
+  cursor: default;
+  transition: filter 0.12s ease, transform 0.1s ease;
+}
+
+.light--close {
+  background: var(--tl-close);
+}
+.light--min {
+  background: var(--tl-min);
+}
+.light--max {
+  background: var(--tl-max);
+}
+
+.light::before {
+  font: 700 10px/1 "Segoe UI", sans-serif;
+  opacity: 0;
+  transform: translateY(-0.4px);
+  transition: opacity 0.1s ease;
+}
+
+.light--close::before {
+  content: "×";
+  color: var(--tl-close-glyph);
+}
+.light--min::before {
+  content: "−";
+  color: var(--tl-min-glyph);
+}
+.light--max::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  transform: none;
+  background: center/contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M1.7 4.4V1.7h2.7M4.4 1.7 1.7 4.4M8.3 5.6v2.7H5.6M5.6 8.3l2.7-2.7' fill='none' stroke='%23075b16' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.traffic:hover .light::before {
+  opacity: 1;
+}
+.light:hover {
+  filter: brightness(0.96);
+}
+.light:active {
+  filter: brightness(0.88);
+  transform: scale(0.9);
+}
+.light:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* ================= 真悬浮玻璃侧栏 ================= */
+
+.sidebar {
+  position: fixed;
+  top: var(--sidebar-gap);
+  left: var(--sidebar-gap);
+  bottom: var(--sidebar-gap);
+  width: var(--sidebar-w);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--sidebar-radius);
+  background-color: var(--sidebar);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    inset 0 0 0 1px var(--glass-inner),
+    0 0 0 1px var(--glass-edge),
+    0 1px 2px var(--glass-contact),
+    0 12px 32px -14px var(--glass-shade);
+  overflow: hidden;
+}
+
+.sidebar__chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--chrome-h);
+  flex: 0 0 var(--chrome-h);
+  padding: 0 16px;
+  user-select: none;
+}
+
+/* 侧栏头部：logo 与标题 */
+.sidebar__header {
+  padding: 2px 16px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sidebar__logo-mark {
+  width: 24px;
+  height: 24px;
+  border-radius: 6.5px;
+  background: linear-gradient(180deg, color-mix(in oklch, var(--mac-accent) 72%, white), var(--mac-accent));
+  color: var(--mac-accent-fg);
+  display: grid;
+  place-items: center;
+  flex: none;
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 35%), 0 1px 2px var(--glass-contact);
+}
+
+html[data-accent="graphite"] .sidebar__logo-mark {
+  background: linear-gradient(180deg, color-mix(in oklch, var(--foreground) 84%, transparent), var(--foreground));
+  color: var(--background);
+}
+
+.sidebar__logo-text {
+  font-size: var(--font-title3-size);
+  line-height: var(--font-title3-lh);
+  font-weight: 600;
+  letter-spacing: var(--track-15);
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar__search-wrap {
+  padding: 0 12px 8px;
+}
+
+.sidebar__search-btn {
+  width: 100%;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  border-radius: 9px;
+  background-color: var(--glass-control);
+  color: var(--muted-foreground);
+  font-size: var(--font-callout-size);
+  line-height: var(--font-callout-lh);
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    0 0 0 1px var(--glass-edge);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.sidebar__search-btn:hover {
+  background-color: var(--hover);
+  color: var(--foreground);
+}
+
+.sidebar__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 10px 14px 12px;
+  scrollbar-width: none;
+}
+
+.sidebar__scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.sidebar__footer {
+  padding: 8px 10px 10px 12px;
+  border-top: 1px solid var(--sidebar-border);
+}
+
+/* 导航项 —— 胶囊选中项；在彩色 Apple 强调色下使用淡染色透明玻璃，石墨模式回归中性玻璃 */
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.nav-group--compact {
+  margin-bottom: 0;
+}
+
+.nav-item {
+  position: relative;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 33px;
+  padding: 0 10px 0 11px;
+  border-radius: 999px;
+  color: var(--foreground);
+  font-size: var(--font-body-size);
+  line-height: var(--font-body-lh);
+  letter-spacing: var(--track-13);
+  transition: background var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.nav-link:hover {
+  background: var(--hover);
+}
+
+.nav-item.is-selected > .nav-link {
+  background-color: var(--glass-state);
+  box-shadow:
+    inset 0 1px 0 var(--glass-state-rim),
+    0 0 0 1px var(--glass-state-edge);
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+html:not([data-accent="graphite"]) .nav-item.is-selected > .nav-link {
+  background-color: color-mix(in oklch, var(--mac-accent) 14%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 35%, var(--mac-accent) 18%),
+    0 0 0 1px color-mix(in oklch, var(--mac-accent) 26%, transparent);
+  color: var(--foreground);
+}
+
+.nav-icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.nav-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.nav-item.is-selected > .nav-link .nav-icon {
+  color: var(--foreground);
+}
+
+html:not([data-accent="graphite"]) .nav-item.is-selected > .nav-link .nav-icon {
+  color: var(--mac-accent-ink);
+}
+
+.nav-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-badge {
+  font-size: 10px;
+  line-height: 13px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--glass-control);
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+html:not([data-accent="graphite"]) .nav-item.is-selected .nav-badge {
+  background: color-mix(in oklch, var(--mac-accent) 18%, transparent);
+  color: var(--mac-accent-ink);
+}
+
+.nav-section-title {
+  font-size: var(--font-callout-size);
+  line-height: var(--font-callout-lh);
+  font-weight: 600;
+  letter-spacing: var(--track-12);
+  color: var(--muted-foreground);
+  padding: 10px 10px 6px 11px;
+}
+
+/* ================= 主内容区与自绘悬浮滚动条 ================= */
+
+.main {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 彻底隐藏系统原生滚动条，避免轨道切入右上 / 右下 32px 圆角与边缘 */
+.page {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+.page::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* 自绘悬浮滚动条：避让上下 44px 圆角弧，透明轨道 + 胶囊滑块 */
+.mac-scrollbar {
+  position: fixed;
+  top: 44px;
+  bottom: 44px;
+  right: 4px;
+  width: 10px;
+  z-index: 45;
+  display: none;
+  pointer-events: none;
+}
+
+.mac-scrollbar.is-on {
+  display: block;
+}
+
+.mac-scrollbar__thumb {
+  width: 5px;
+  margin: 0 auto;
+  border-radius: 999px;
+  background: oklch(0.35 0 0 / 28%);
+  pointer-events: auto;
+  will-change: transform;
+  transition: width var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.dark .mac-scrollbar__thumb {
+  background: oklch(0.85 0 0 / 24%);
+}
+
+.mac-scrollbar:hover .mac-scrollbar__thumb,
+.mac-scrollbar.is-dragging .mac-scrollbar__thumb {
+  width: 7px;
+  background: oklch(0.3 0 0 / 50%);
+}
+
+.dark .mac-scrollbar:hover .mac-scrollbar__thumb,
+.dark .mac-scrollbar.is-dragging .mac-scrollbar__thumb {
+  background: oklch(0.92 0 0 / 46%);
+}
+
+@media (max-width: 860px) {
+  .mac-scrollbar {
+    top: 64px;
+    bottom: 16px;
+    right: 3px;
+  }
+}
+
+.page-inner {
+  padding-top: 48px;
+  padding-bottom: 80px;
+  padding-left: calc(var(--sidebar-w) + var(--sidebar-gap) + var(--content-x));
+  padding-right: var(--content-right);
+}
+
+.page-inner > *:not(.shelf-bleed):not(.workspace-bleed) {
+  max-width: var(--page-max);
+}
+
+/* 工具栏（前导标题 / 末缘动作） */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--toolbar-h);
+  padding: 10px 0 4px;
+}
+
+.toolbar__heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.toolbar__title {
+  font-size: var(--font-title1-size);
+  line-height: var(--font-title1-lh);
+  font-weight: 700;
+  letter-spacing: var(--track-22);
+  color: var(--foreground);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.page-title {
+  font-size: var(--font-large-title-size);
+  line-height: var(--font-large-title-lh);
+  font-weight: 700;
+  letter-spacing: var(--track-26);
+  color: var(--foreground);
+  padding: 6px 0 18px;
+}
+
+.page-subtitle {
+  font-size: var(--font-body-size);
+  line-height: var(--font-body-lh);
+  color: var(--muted-foreground);
+  margin: -4px 0 20px;
+}
+
+.section-title {
+  font-size: var(--font-title2-size);
+  line-height: var(--font-title2-lh);
+  font-weight: 700;
+  letter-spacing: var(--track-17);
+  color: var(--foreground);
+  margin: 30px 0 12px;
+}
+
+.section-desc {
+  font-size: var(--font-callout-size);
+  line-height: var(--font-callout-lh);
+  color: var(--muted-foreground);
+  margin: -6px 0 14px;
+}
+
+/* ================= 全幅工作区与滑入侧栏下方的货架 ================= */
+
+.workspace-bleed {
+  margin-left: calc(-1 * var(--content-x) + var(--sidebar-gap));
+  margin-right: calc(-1 * var(--content-right) + var(--sidebar-gap));
+  max-width: none;
+}
+
+.shelf-bleed {
+  position: relative;
+  margin-left: calc(-1 * (var(--sidebar-w) + var(--sidebar-gap) + var(--content-x)));
+  margin-right: calc(-1 * var(--content-right));
+  max-width: none;
+}
+
+.shelf-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-left: calc(var(--sidebar-w) + var(--sidebar-gap) + var(--content-x));
+  padding-right: var(--content-right);
+  margin-bottom: 10px;
+}
+
+.shelf-scroller {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.shelf-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.shelf-list {
+  display: flex;
+  gap: 14px;
+  width: max-content;
+  padding: 4px var(--content-right) 12px calc(var(--sidebar-w) + var(--sidebar-gap) + var(--content-x));
+}
+
+.shelf-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 52px;
+  border-radius: 999px;
+  background: var(--popover);
+  -webkit-backdrop-filter: var(--glass-blur-control);
+  backdrop-filter: var(--glass-blur-control);
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    0 0 0 1px var(--popover-edge),
+    0 8px 20px -8px var(--glass-shade);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--foreground);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out);
+  z-index: 8;
+}
+
+.shelf-arrow--left {
+  left: calc(var(--sidebar-w) + var(--sidebar-gap) + 6px);
+}
+
+.shelf-arrow--right {
+  right: 18px;
+}
+
+.shelf-bleed:hover .shelf-arrow.is-enabled,
+.shelf-bleed:focus-within .shelf-arrow.is-enabled {
+  opacity: 0.92;
+  pointer-events: auto;
+}
+
+.shelf-arrow.is-enabled:hover {
+  opacity: 1;
+}
+
+/* ================= 窄窗（手机壳） ================= */
+
+.drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: none;
+  background-color: var(--sidebar);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  padding: 12px;
+}
+
+.drawer.is-open {
+  display: flex;
+  flex-direction: column;
+}
+
+.drawer__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px 14px;
+}
+
+.drawer__close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--muted-foreground);
+}
+
+.drawer__close:hover {
+  background: var(--hover);
+}
+
+.drawer__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 6px;
+}
+
+.mobile-topbar {
+  position: fixed;
+  top: max(8px, env(safe-area-inset-top));
+  left: 8px;
+  right: 8px;
+  height: 48px;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 74px;
+  background-color: var(--sidebar);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-radius: var(--topbar-radius);
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    0 0 0 1px var(--glass-edge),
+    0 12px 32px -14px var(--glass-shade);
+  z-index: 40;
+}
+
+.mobile-topbar__traffic {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.mobile-topbar__menu {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--muted-foreground);
+}
+
+.mobile-topbar__menu:hover {
+  background: var(--hover);
+}
+
+.mobile-topbar__logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--foreground);
+  min-width: 0;
+}
+
+.mobile-topbar__spacer {
+  flex: 1;
+}
+
+@media (max-width: 860px) {
+  .sidebar {
+    display: none;
+  }
+
+  .page-inner {
+    padding-top: 68px;
+    padding-bottom: max(80px, calc(64px + env(safe-area-inset-bottom)));
+    padding-left: var(--content-x);
+    padding-right: var(--content-x);
+  }
+
+  .workspace-bleed {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .shelf-bleed {
+    margin-left: calc(-1 * var(--content-x));
+    margin-right: calc(-1 * var(--content-x));
+  }
+
+  .shelf-header,
+  .shelf-list {
+    padding-left: var(--content-x);
+    padding-right: var(--content-x);
+  }
+
+  .shelf-arrow--left {
+    left: 6px;
+  }
+
+  .mobile-topbar {
+    display: flex;
+  }
+
+  .page-title {
+    font-size: var(--font-title1-size);
+    line-height: var(--font-title1-lh);
+  }
+}
+
+/* ================= Wails 无边框窗口拖动区（GitRepoMirror 适配） ================= */
+
+/* data-wails-drag 元素交给 Wails 的 CSS 拖动机制接管；
+   其内部交互控件用 data-wails-no-drag 交还给页面。 */
+[data-wails-drag] {
+  --wails-draggable: drag;
+  user-select: none;
+}
+
+[data-wails-drag] [data-wails-no-drag],
+[data-wails-no-drag] {
+  --wails-draggable: nodrag;
+}
+
+/* ================= 实时无障碍与材质控制 ================= */
+
+html.is-reduced-transparency {
+  --glass-blur: none;
+  --glass-blur-control: none;
+  --panel: oklch(0.97 0.004 265);
+  --card: oklch(0.985 0.003 265);
+  --popover: oklch(0.99 0.002 265);
+  --sidebar: oklch(0.96 0.004 265);
+}
+
+html.dark.is-reduced-transparency {
+  --panel: oklch(0.19 0 0);
+  --card: oklch(0.24 0 0);
+  --popover: oklch(0.22 0 0);
+  --sidebar: oklch(0.14 0 0);
+}
+
+html.is-reduced-motion,
+html.is-reduced-motion *,
+html.is-reduced-motion *::before,
+html.is-reduced-motion *::after {
+  --dur-fast: 0.01s;
+  --dur: 0.01s;
+  --dur-slow: 0.01s;
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+}
