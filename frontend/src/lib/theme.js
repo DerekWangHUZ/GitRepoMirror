@@ -2,38 +2,26 @@
  * 外观状态 Store —— GitRepoMirror 精简版。
  *
  * 结构与行为参考 macUI-SolidGlass 模板本机副本（web/src/lib/theme.ts），
- * 复制日期 2026-11-22：`dark` class 机制、system/light/dark 偏好、
- * 8 色 Apple 强调色（html[data-accent]，默认 graphite）、
- * useSyncExternalStore 订阅全部保留；模糊半径、透明度等本应用未用到的
- * 材质开关已按需裁剪（透明度偏好改由系统 prefers-reduced-transparency
- * matchMedia 实时映射到 html.is-reduced-transparency；动态效果同理映射
- * html.is-reduced-motion）。token 禁止手工微调。
+ * `dark` class 机制、system/light/dark 偏好、useSyncExternalStore 订阅
+ * 全部保留；模糊半径、透明度等本应用未用到的材质开关已按需裁剪
+ * （透明度偏好改由系统 prefers-reduced-transparency matchMedia 实时映射到
+ * html.is-reduced-transparency；动态效果同理映射 html.is-reduced-motion）。
+ * token 禁止手工微调。
  *
- * 兼容 `?theme=light|dark` 与 `?accent=blue|...` URL 调试参数。
+ * 强调色（accent）机制已移除：Solid Glass 官方定调「The interface has no
+ * colour of its own. Primary is the ink」，主控件就是墨面，无需强调色通道。
+ *
+ * 兼容 `?theme=light|dark` URL 调试参数。
  *
  * @typedef {"dark" | "light"} Theme
  * @typedef {"system" | "dark" | "light"} ThemePreference
- * @typedef {"blue" | "purple" | "pink" | "red" | "orange" | "yellow" | "green" | "graphite"} AccentColor
- * @typedef {{ themePreference: ThemePreference, theme: Theme, accent: AccentColor }} MaterialPrefs
+ * @typedef {{ themePreference: ThemePreference, theme: Theme }} MaterialPrefs
  */
 import { useCallback, useSyncExternalStore } from "react";
 
-export const ACCENT_OPTIONS = [
-  { id: "blue", label: "蓝色", swatch: "#0088ff" },
-  { id: "purple", label: "紫色", swatch: "#cb30e0" },
-  { id: "pink", label: "粉色", swatch: "#ff2d55" },
-  { id: "red", label: "红色", swatch: "#ff383c" },
-  { id: "orange", label: "橙色", swatch: "#ff8d28" },
-  { id: "yellow", label: "黄色", swatch: "#ffcc00" },
-  { id: "green", label: "绿色", swatch: "#34c759" },
-  { id: "graphite", label: "石墨（原版单色）", swatch: "#8e8e93" },
-];
-
 const THEME_KEY = "git-repo-mirror:theme-pref";
 const LEGACY_THEME_KEY = "solid-glass:theme-pref";
-const ACCENT_KEY = "git-repo-mirror:accent";
 const VALID_PREFERENCES = new Set(["system", "dark", "light"]);
-const VALID_ACCENTS = new Set(ACCENT_OPTIONS.map((option) => option.id));
 const listeners = new Set();
 
 function getQueryParams() {
@@ -50,11 +38,6 @@ function getQueryParams() {
 function getQueryTheme() {
   const t = getQueryParams()?.get("theme");
   return t === "light" || t === "dark" ? t : null;
-}
-
-function getQueryAccent() {
-  const a = getQueryParams()?.get("accent");
-  return a && VALID_ACCENTS.has(a) ? a : null;
 }
 
 function systemDark() {
@@ -79,19 +62,6 @@ function readStoredPref() {
   return "system";
 }
 
-function readStoredAccent() {
-  const forced = getQueryAccent();
-  if (forced) return forced;
-  try {
-    const v = localStorage.getItem(ACCENT_KEY);
-    if (v && VALID_ACCENTS.has(v)) return v;
-  } catch {
-    // ignore
-  }
-  // 默认石墨：保留 Solid Glass 原版黑白灰单色设计。
-  return "graphite";
-}
-
 let currentPrefs = computeInitialPrefs();
 
 function computeInitialPrefs() {
@@ -102,14 +72,13 @@ function computeInitialPrefs() {
         ? "dark"
         : "light"
       : themePreference;
-  return { themePreference, theme: resolved, accent: readStoredAccent() };
+  return { themePreference, theme: resolved };
 }
 
 function applyToDom(prefs) {
-  // Solid Glass / macOS 骨架依赖 html 上的 `dark` class 与 data-accent。
+  // Solid Glass / macOS 骨架依赖 html 上的 `dark` class。
   const root = document.documentElement;
   root.classList.toggle("dark", prefs.theme === "dark");
-  root.dataset.accent = prefs.accent;
   syncMediaClasses();
 }
 
@@ -145,17 +114,8 @@ if (typeof document !== "undefined") {
     motionMql.addEventListener("change", syncMediaClasses);
     window.addEventListener("hashchange", () => {
       const forcedTheme = getQueryTheme();
-      const forcedAccent = getQueryAccent();
-      const patch = {};
       if (forcedTheme) {
-        patch.themePreference = forcedTheme;
-        patch.theme = forcedTheme;
-      }
-      if (forcedAccent) {
-        patch.accent = forcedAccent;
-      }
-      if (Object.keys(patch).length > 0) {
-        updatePrefs(patch);
+        updatePrefs({ themePreference: forcedTheme, theme: forcedTheme });
       }
     });
   } catch {
@@ -197,19 +157,11 @@ export function useTheme() {
     updatePrefs({ themePreference: next, theme: resolved });
   }, []);
 
-  const setAccent = useCallback((next) => {
-    if (!VALID_ACCENTS.has(next)) return;
-    persist(ACCENT_KEY, next);
-    updatePrefs({ accent: next });
-  }, []);
-
   return {
     theme: prefs.theme,
     themePreference: prefs.themePreference,
     resolvedTheme: prefs.theme,
-    accent: prefs.accent,
     setTheme,
-    setAccent,
   };
 }
 

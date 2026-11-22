@@ -30,7 +30,7 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { backend, EventsOn } from "@/backend";
 import { NAV_ENTRIES } from "@/lib/nav";
-import { ACCENT_OPTIONS, useTheme } from "@/lib/theme";
+import { useTheme } from "@/lib/theme";
 import { appendLog, createLogs } from "@/lib/logs";
 import { cn, errorText, managedPlatforms, platformLabel } from "@/lib/utils";
 
@@ -55,7 +55,7 @@ export default function App() {
   );
   const [cmdOpen, setCmdOpen] = useState(false);
   const pageRef = useRef(null);
-  const { theme, setTheme, accent, setAccent } = useTheme();
+  const { theme, setTheme } = useTheme();
 
   // 最大化状态由桌面接线（skin/desktop.js）驱动：is-maximized 同步时广播
   // grm:window-maximized 事件。初值经 useState 惰性初始化读取（避免 effect
@@ -349,13 +349,6 @@ export default function App() {
                 draft={settingsDraft}
                 onDraftChange={setSettingsDraft}
                 onSave={saveSettings}
-                accent={accent}
-                onAccentChange={(next) => {
-                  setAccent(next);
-                  toast.success(
-                    `强调色已切换为：${ACCENT_OPTIONS.find((option) => option.id === next)?.label ?? next}`,
-                  );
-                }}
               />
             </div>
           </div>
@@ -477,25 +470,6 @@ export default function App() {
                 )}
                 <span>切换至{theme === "dark" ? "浅色" : "深色"}模式</span>
               </CommandItem>
-              {ACCENT_OPTIONS.map((option) => (
-                <CommandItem
-                  key={option.id}
-                  value={`强调色 accent ${option.id} ${option.label}`}
-                  onSelect={() => {
-                    setAccent(option.id);
-                    setCmdOpen(false);
-                    toast.success(`强调色已切换为：${option.label}`);
-                  }}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="size-3 shrink-0 rounded-full ring-1 ring-black/15 dark:ring-white/20"
-                    style={{ backgroundColor: option.swatch }}
-                  />
-                  <span>强调色：{option.label}</span>
-                  {accent === option.id && <CommandShortcut>当前</CommandShortcut>}
-                </CommandItem>
-              ))}
             </CommandGroup>
           </CommandList>
         </Command>

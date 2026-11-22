@@ -261,19 +261,9 @@ describe("UI contracts", () => {
     expect(screen.getByRole("button", { name: "还原" })).toBeTruthy();
   });
 
-  it("covers the 8 Apple accent options with graphite included", async () => {
-    const { ACCENT_OPTIONS } = await import("@/lib/theme");
-    const ids = ACCENT_OPTIONS.map((option) => option.id);
-    expect(ids).toEqual([
-      "blue",
-      "purple",
-      "pink",
-      "red",
-      "orange",
-      "yellow",
-      "green",
-      "graphite",
-    ]);
+  it("keeps the theme store free of the removed accent channel", async () => {
+    const theme = await import("@/lib/theme");
+    expect(theme.ACCENT_OPTIONS).toBeUndefined();
   });
 
   it("renders platform icons as inert svg", () => {
