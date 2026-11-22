@@ -2,62 +2,35 @@
    GitRepoMirror 业务视图层。
    材质一律引用 Solid Glass 的三档玻璃（panel / card / popover）与
    macOS 骨架 token；本文件只描述业务布局，不另造玻璃样式。
+   字号与字距一律取 tokens.css 的 --font-*/--track-* HIG 刻度（S7）。
    ========================================================================== */
 
 /* ---- 页面骨架 ---- */
-
-.grm-main {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.grm-content {
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  overflow: hidden;
-}
+/* 外壳链路（S1）：.window → .main → .page → .page-inner → .toolbar。
+   .main/.page/.page-inner/.toolbar 的几何由 chrome.css 提供；
+   .grm-view 是页面内的视图容器（hidden 切换三视图）。 */
 
 .grm-view {
-  height: 100%;
-  overflow-y: auto;
-  /* 让位：悬浮玻璃侧栏 (fixed) 占据左侧，内容区参照 chrome.css 的 page-inner 契约右移 */
-  padding: 34px clamp(30px, 4.5vw, 62px) 100px;
-  padding-left: calc(var(--sidebar-w) + var(--sidebar-gap) + var(--content-x));
+  min-height: 100%;
+  /* 控制台展开时为其让出空间，避免底部内容被遮挡 */
+  padding-bottom: 194px;
   transition: padding-bottom 0.28s cubic-bezier(0.25, 0.8, 0.25, 1);
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
 }
 
-/* 实时输出面板展开时（高 210px）为其让出空间，避免底部内容被遮挡 */
-.grm-main:has(.grm-console:not(.collapsed)) .grm-view {
+/* 实时输出面板展开时（高 210px）进一步让位 */
+.main:has(.grm-console:not(.collapsed)) .grm-view {
   padding-bottom: 274px;
 }
 
-.grm-page-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 28px;
+/* 工具栏范式（S8）：52px leading 标题 + trailing 动作。
+   标题字号由 chrome.css .toolbar__title（title1 22px/700）提供。 */
+
+.page-subtitle {
+  /* 几何沿用 chrome.css .page-subtitle；此处只补业务文案的间距微调 */
 }
 
-.grm-page-head h1 {
-  margin: 0 0 5px;
-  font-size: var(--font-title1-size);
-  line-height: var(--font-title1-lh);
-  letter-spacing: var(--track-22);
-  font-weight: 700;
-}
-
-.grm-page-head p {
-  margin: 0;
-  color: var(--muted-foreground);
-  font-size: var(--font-callout-size);
-  line-height: var(--font-callout-lh);
+.section-title {
+  /* 分节标题由 chrome.css 提供（title2 17px/700 + track-17） */
 }
 
 /* ---- 侧栏业务部分 ---- */
@@ -66,20 +39,6 @@
   display: grid;
   gap: 10px;
   padding: 2px 16px 14px;
-}
-
-.grm-sidebar-label {
-  padding: 10px 10px 6px 11px;
-  color: var(--muted-foreground);
-  font-size: var(--font-callout-size);
-  line-height: var(--font-callout-lh);
-  font-weight: 600;
-  letter-spacing: var(--track-12);
-}
-
-.grm-sidebar-footer {
-  padding: 8px 10px 10px 12px;
-  border-top: 1px solid var(--sidebar-border);
 }
 
 .grm-env-pill {
@@ -175,11 +134,6 @@
 }
 
 /* ---- 仓库列表 ---- */
-
-.grm-head-actions {
-  display: flex;
-  gap: 9px;
-}
 
 .grm-repo-grid {
   display: grid;
@@ -277,8 +231,9 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 14px;
-  letter-spacing: -0.015em;
+  font-size: var(--font-headline-size);
+  line-height: var(--font-headline-lh);
+  letter-spacing: var(--track-13);
   font-weight: 600;
 }
 
@@ -325,6 +280,7 @@
   margin-top: 4px;
   font-size: var(--font-footnote-size);
   font-weight: 580;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -564,8 +520,9 @@
   display: flex;
   gap: 12px;
   padding: 3px 14px;
+  /* 等宽字号取 HIG subheadline 刻度（tokens.css） */
   font:
-    11px/1.55 "Geist Mono Variable",
+    var(--font-subheadline-size)/1.55 "Geist Mono Variable",
     "Cascadia Mono",
     Consolas,
     monospace;
@@ -670,7 +627,7 @@
 }
 
 .grm-console-body .grm-log-line {
-  font-size: 10px;
+  font-size: var(--font-caption1-size);
   padding-top: 1px;
   padding-bottom: 1px;
 }
@@ -788,6 +745,88 @@
   }
 }
 
+/* ---- 强调色选择器（设置 · 外观） ---- */
+
+.grm-accent-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.grm-accent-swatch {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--glass-control);
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    0 0 0 1px var(--glass-edge);
+  color: var(--muted-foreground);
+  font-size: var(--font-footnote-size);
+  line-height: var(--font-footnote-lh);
+  font-weight: 550;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.grm-accent-swatch:hover {
+  background: var(--hover);
+  color: var(--foreground);
+}
+
+.grm-accent-swatch.is-selected {
+  background: var(--glass-state);
+  box-shadow:
+    inset 0 1px 0 var(--glass-state-rim),
+    0 0 0 1px var(--glass-state-edge);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.grm-accent-dot {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 35%),
+    0 0 0 1px oklch(0 0 0 / 18%);
+}
+
+.grm-accent-swatch.is-selected .grm-accent-dot {
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 35%),
+    0 0 0 2px var(--background),
+    0 0 0 3.5px var(--mac-accent-ink);
+}
+
+.grm-accent-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- 统计卡（S8）：22px tabular-nums 大数 + footnote 标签 ---- */
+
+.grm-stat-value {
+  margin: 4px 0 0;
+  font-size: var(--font-title1-size);
+  line-height: var(--font-title1-lh);
+  letter-spacing: var(--track-22);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+
+.grm-stat-label {
+  color: var(--muted-foreground);
+  font-size: var(--font-footnote-size);
+  line-height: var(--font-footnote-lh);
+}
+
 @media (max-width: 940px) {
   :root {
     --sidebar-w: 190px;
@@ -796,11 +835,15 @@
   .grm-repo-grid {
     grid-template-columns: 1fr;
   }
+
+  .grm-accent-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
-/* 窄窗（≤860px）按 chrome.css 契约：侧栏隐藏，内容恢复左右对称留白 */
+/* 窄窗（≤860px）按 chrome.css 契约：侧栏隐藏，page-inner 恢复对称留白 */
 @media (max-width: 860px) {
   .grm-view {
-    padding-left: var(--content-x);
+    padding-bottom: 160px;
   }
 }

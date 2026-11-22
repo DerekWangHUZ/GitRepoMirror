@@ -21,4 +21,5 @@
 @import "./skin/solid-glass.css";
 @import "./skin/macos/tokens.css";
 @import "./skin/macos/chrome.css";
+@import "./skin/desktop.css";
 @import "./app.css";

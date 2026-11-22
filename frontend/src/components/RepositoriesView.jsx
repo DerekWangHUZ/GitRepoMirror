@@ -16,12 +16,12 @@ export function RepositoriesView({
 }) {
   return (
     <>
-      <div className="grm-page-head">
-        <div>
-          <h1>镜像仓库</h1>
-          <p>在不同 Git 托管平台之间保存独立副本</p>
+      {/* 工具栏范式：52px leading 标题 + trailing 动作（chrome.css .toolbar） */}
+      <div className="toolbar">
+        <div className="toolbar__heading">
+          <h1 className="toolbar__title">镜像仓库</h1>
         </div>
-        <div className="grm-head-actions">
+        <div className="toolbar__actions">
           <Button
             variant="outline"
             disabled={!repositories.length || busy.size > 0}
@@ -36,19 +36,23 @@ export function RepositoriesView({
           </Button>
         </div>
       </div>
+      <p className="page-subtitle">在不同 Git 托管平台之间保存独立副本</p>
       {repositories.length ? (
-        <div className="grm-repo-grid">
-          {repositories.map((repo) => (
-            <RepositoryCard
-              key={repo.id}
-              repo={repo}
-              busy={busy}
-              onSyncOne={onSyncOne}
-              onRemove={onRemove}
-              onOpenURL={onOpenURL}
-            />
-          ))}
-        </div>
+        <section>
+          <h2 className="section-title">仓库</h2>
+          <div className="grm-repo-grid">
+            {repositories.map((repo) => (
+              <RepositoryCard
+                key={repo.id}
+                repo={repo}
+                busy={busy}
+                onSyncOne={onSyncOne}
+                onRemove={onRemove}
+                onOpenURL={onOpenURL}
+              />
+            ))}
+          </div>
+        </section>
       ) : (
         <EmptyState onNewMirror={onNewMirror} />
       )}

@@ -75,4 +75,9 @@ func (a *App) ToggleMaximise() {
 	}
 }
 
+// WindowIsMaximised 暴露窗口最大化状态，前端 is-maximized 同步查询用。
+func (a *App) WindowIsMaximised() bool {
+	return runtime.WindowIsMaximised(a.ctx)
+}
+
 func (a *App) Close() { runtime.Quit(a.ctx) }

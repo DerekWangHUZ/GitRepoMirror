@@ -1,5 +1,8 @@
 // 设置视图：迁移自 templates.js 的 settingsView。
 // 受控表单：默认值来自后端，编辑后由 App 持有草稿并统一提交。
+// 外观分节：强调色走 lib/theme.js 的 data-accent 通道（默认 graphite）。
+import { cn } from "@/lib/utils";
+import { ACCENT_OPTIONS } from "@/lib/theme";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -11,16 +14,17 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 
-export function SettingsView({ draft, onDraftChange, onSave }) {
+export function SettingsView({ draft, onDraftChange, onSave, accent, onAccentChange }) {
   const patch = (changes) => onDraftChange({ ...draft, ...changes });
   return (
     <>
-      <div className="grm-page-head">
-        <div>
-          <h1>设置</h1>
-          <p>配置网络、命名与同步行为</p>
+      {/* 工具栏范式：52px leading 标题（chrome.css .toolbar） */}
+      <div className="toolbar">
+        <div className="toolbar__heading">
+          <h1 className="toolbar__title">设置</h1>
         </div>
       </div>
+      <p className="page-subtitle">配置网络、命名与同步行为</p>
       <form
         className="grm-settings-form"
         id="settingsForm"
@@ -119,8 +123,39 @@ export function SettingsView({ draft, onDraftChange, onSave }) {
             </span>
           </label>
         </section>
+        <AccentSection accent={accent} onAccentChange={onAccentChange} />
         <Button type="submit">保存设置</Button>
       </form>
     </>
+  );
+}
+
+/** 外观分节：Apple 8 色强调色 + graphite 选择器（html[data-accent]）。 */
+function AccentSection({ accent, onAccentChange }) {
+  return (
+    <section className="grm-setting-section" data-testid="accent-section">
+      <h3>外观</h3>
+      <div className="grm-label">强调色</div>
+      <div className="grm-accent-grid" role="radiogroup" aria-label="强调色">
+        {ACCENT_OPTIONS.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            role="radio"
+            aria-checked={accent === option.id}
+            title={option.label}
+            className={cn("grm-accent-swatch", accent === option.id && "is-selected")}
+            onClick={() => onAccentChange(option.id)}
+          >
+            <span
+              aria-hidden="true"
+              className="grm-accent-dot"
+              style={{ backgroundColor: option.swatch }}
+            />
+            <span className="grm-accent-name">{option.label}</span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }

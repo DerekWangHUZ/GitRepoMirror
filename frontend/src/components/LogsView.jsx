@@ -5,15 +5,18 @@ import { Button } from "@/components/ui/button";
 export function LogsView({ logs, onClear }) {
   return (
     <>
-      <div className="grm-page-head">
-        <div>
-          <h1>运行日志</h1>
-          <p>实时查看 Git 与平台 CLI 输出</p>
+      {/* 工具栏范式：52px leading 标题 + trailing 动作（chrome.css .toolbar） */}
+      <div className="toolbar">
+        <div className="toolbar__heading">
+          <h1 className="toolbar__title">运行日志</h1>
         </div>
-        <Button variant="outline" onClick={onClear}>
-          清空日志
-        </Button>
+        <div className="toolbar__actions">
+          <Button variant="outline" onClick={onClear}>
+            清空日志
+          </Button>
+        </div>
       </div>
+      <p className="page-subtitle">实时查看 Git 与平台 CLI 输出</p>
       <div className="grm-log-panel">
         {logs.length ? (
           logs.map((log, index) => <LogLine key={index} log={log} />)

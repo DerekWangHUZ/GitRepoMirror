@@ -60,6 +60,8 @@ func dirWritable(dir string) bool {
 
 func main() {
 	app := NewApp()
+	// 窗口一出现就把外形裁成 32px 圆角，与侧栏的圆角同心（模板 desktop/window_shape.go）。
+	installWindowShapeWhenReady()
 	if err := wails.Run(&options.App{
 		Title:            "GitRepoMirror",
 		Width:            1180,

@@ -2,18 +2,35 @@
 // - Wails 事件订阅（log/progress/repositories-changed）集中在 useEffect 中管理生命周期，
 //   返回卸载清理函数，严禁轮询。
 // - backend.js 仍是唯一 API 层（DEV 下 ?fixture=states mock 继续可用）。
-import { useCallback, useEffect, useMemo, useState } from "react";
+// - 外壳链路对齐模板规范 S1：.window → .main → .page → .page-inner → .toolbar；
+//   .page 是唯一滚动容器（原生滚动条隐藏，自绘 mac-scrollbar 悬浮）。
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Activity, Moon, Plus, RefreshCw, Sun } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Console } from "@/components/Console";
 import { CreateMirrorDialog } from "@/components/CreateMirrorDialog";
 import { LogsView } from "@/components/LogsView";
+import { MacScrollbar } from "@/components/MacScrollbar";
 import { RepositoriesView } from "@/components/RepositoriesView";
 import { SettingsView } from "@/components/SettingsView";
 import { Sidebar } from "@/components/Sidebar";
+import {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+  CommandShortcut,
+} from "@/components/ui/command";
 import { Toaster } from "@/components/ui/sonner";
 import { backend, EventsOn } from "@/backend";
+import { NAV_ENTRIES } from "@/lib/nav";
+import { ACCENT_OPTIONS, useTheme } from "@/lib/theme";
 import { appendLog, createLogs } from "@/lib/logs";
 import { cn, errorText, managedPlatforms, platformLabel } from "@/lib/utils";
 
@@ -31,6 +48,40 @@ export default function App() {
   const [consoleCollapsed, setConsoleCollapsed] = useState(true);
   const [confirmRequest, setConfirmRequest] = useState(null);
   const [settingsDraft, setSettingsDraft] = useState(EMPTY_DATA.settings);
+  const [maximized, setMaximized] = useState(
+    () =>
+      typeof document !== "undefined" &&
+      document.documentElement.classList.contains("is-maximized"),
+  );
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const pageRef = useRef(null);
+  const { theme, setTheme, accent, setAccent } = useTheme();
+
+  // 最大化状态由桌面接线（skin/desktop.js）驱动：is-maximized 同步时广播
+  // grm:window-maximized 事件。初值经 useState 惰性初始化读取（避免 effect
+  // 内同步 setState），事件驱动，零轮询。
+  useEffect(() => {
+    const sync = (event) => setMaximized(Boolean(event?.detail));
+    window.addEventListener("grm:window-maximized", sync);
+    return () => window.removeEventListener("grm:window-maximized", sync);
+  }, []);
+
+  // ⌘K / Ctrl+K 命令面板快捷键
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCmdOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // 切视图时把 .page 滚动位置带回顶部
+  useEffect(() => {
+    pageRef.current?.scrollTo({ top: 0 });
+  }, [view]);
 
   const applyLogs = useCallback((updater) => {
     setLogs((previous) => {
@@ -115,15 +166,15 @@ export default function App() {
     });
   }, []);
 
-  // ---- 窗口控制（红绿灯） ----
+  // ---- 窗口控制（红绿灯）：maximized 接真实状态（桌面接线同步） ----
   const windowActions = useMemo(
     () => ({
-      maximized: false,
+      maximized,
       onClose: () => backend.Close(),
       onMinimize: () => backend.Minimise(),
       onMaximize: () => backend.ToggleMaximise(),
     }),
-    [],
+    [maximized],
   );
 
   // ---- 业务动作 ----
@@ -268,32 +319,47 @@ export default function App() {
     (platform) => env[platform.id]?.authenticated,
   ).length;
 
+  const jumpToView = useCallback((id) => {
+    setCmdOpen(false);
+    setView(id);
+  }, []);
+
   return (
-    <div className="window">
-      <main className="grm-main">
-        <section className="grm-content">
-          <div className={cn("grm-view", view !== "repositories" && "hidden")}>
-            <RepositoriesView
-              repositories={data.repositories || []}
-              busy={busy}
-              onSyncAll={syncAll}
-              onNewMirror={openModal}
-              onSyncOne={syncOne}
-              onRemove={removeOne}
-              onOpenURL={(url) => backend.OpenURL(url)}
-            />
+    <div className={cn("window", maximized && "is-maximized")}>
+      <main className="main">
+        {/* .page：唯一滚动容器；原生滚动条隐藏，自绘滚动条悬浮在右侧 */}
+        <div className="page" ref={pageRef}>
+          <div className="page-inner">
+            <div className={cn("grm-view", view !== "repositories" && "hidden")}>
+              <RepositoriesView
+                repositories={data.repositories || []}
+                busy={busy}
+                onSyncAll={syncAll}
+                onNewMirror={openModal}
+                onSyncOne={syncOne}
+                onRemove={removeOne}
+                onOpenURL={(url) => backend.OpenURL(url)}
+              />
+            </div>
+            <div className={cn("grm-view", view !== "logs" && "hidden")}>
+              <LogsView logs={logs} onClear={clearLogs} />
+            </div>
+            <div className={cn("grm-view", view !== "settings" && "hidden")}>
+              <SettingsView
+                draft={settingsDraft}
+                onDraftChange={setSettingsDraft}
+                onSave={saveSettings}
+                accent={accent}
+                onAccentChange={(next) => {
+                  setAccent(next);
+                  toast.success(
+                    `强调色已切换为：${ACCENT_OPTIONS.find((option) => option.id === next)?.label ?? next}`,
+                  );
+                }}
+              />
+            </div>
           </div>
-          <div className={cn("grm-view", view !== "logs" && "hidden")}>
-            <LogsView logs={logs} onClear={clearLogs} />
-          </div>
-          <div className={cn("grm-view", view !== "settings" && "hidden")}>
-            <SettingsView
-              draft={settingsDraft}
-              onDraftChange={setSettingsDraft}
-              onSave={saveSettings}
-            />
-          </div>
-        </section>
+        </div>
         <Console
           logs={logs}
           busyCount={busyCount}
@@ -302,9 +368,11 @@ export default function App() {
         />
       </main>
 
+      {/* 真悬浮玻璃侧栏：position: fixed 位于 .main 之上 */}
       <Sidebar
         view={view}
         onViewChange={setView}
+        onOpenCommand={() => setCmdOpen(true)}
         repoCount={(data.repositories || []).length}
         env={env}
         envOk={envOk}
@@ -313,6 +381,8 @@ export default function App() {
         onLoginPlatform={loginPlatform}
         windowActions={windowActions}
       />
+
+      <MacScrollbar targetRef={pageRef} route={view} />
 
       <CreateMirrorDialog
         key={String(modalOpen)}
@@ -329,6 +399,108 @@ export default function App() {
         request={confirmRequest}
         onResolve={() => setConfirmRequest(null)}
       />
+
+      {/* 全局 ⌘K 命令面板：视图跳转 + 快捷操作 + 外观切换，不发明新动作 */}
+      <CommandDialog
+        open={cmdOpen}
+        onOpenChange={setCmdOpen}
+        title="GitRepoMirror 命令面板"
+        description="快速切换视图、执行同步操作或调整外观。"
+      >
+        <Command>
+          <CommandInput placeholder="输入视图、命令或外观操作…" />
+          <CommandList>
+            <CommandEmpty>未找到匹配的视图或命令。</CommandEmpty>
+            <CommandGroup heading="视图">
+              {NAV_ENTRIES.map((entry) => {
+                const Icon = entry.icon;
+                return (
+                  <CommandItem
+                    key={entry.id}
+                    value={`${entry.label} ${entry.id}`}
+                    onSelect={() => jumpToView(entry.id)}
+                  >
+                    <Icon className="size-4" />
+                    <span>{entry.label}</span>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup heading="快捷操作">
+              <CommandItem
+                value="新建镜像 create mirror"
+                onSelect={() => {
+                  setCmdOpen(false);
+                  openModal();
+                }}
+              >
+                <Plus className="size-4" />
+                <span>新建镜像</span>
+              </CommandItem>
+              <CommandItem
+                value="全部同步 sync all"
+                onSelect={() => {
+                  setCmdOpen(false);
+                  syncAll();
+                }}
+              >
+                <RefreshCw className="size-4" />
+                <span>全部同步</span>
+              </CommandItem>
+              <CommandItem
+                value="检查环境 environment check"
+                onSelect={() => {
+                  setCmdOpen(false);
+                  checkEnvironment().then(() => toast.success("环境状态已刷新"));
+                }}
+              >
+                <Activity className="size-4" />
+                <span>检查环境</span>
+              </CommandItem>
+            </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup heading="外观">
+              <CommandItem
+                value="切换深浅色主题 theme dark light"
+                onSelect={() => {
+                  const next = theme === "dark" ? "light" : "dark";
+                  setTheme(next);
+                  setCmdOpen(false);
+                  toast.success(`已切换为${next === "dark" ? "深色" : "浅色"}外观`);
+                }}
+              >
+                {theme === "dark" ? (
+                  <Sun className="size-4" />
+                ) : (
+                  <Moon className="size-4" />
+                )}
+                <span>切换至{theme === "dark" ? "浅色" : "深色"}模式</span>
+              </CommandItem>
+              {ACCENT_OPTIONS.map((option) => (
+                <CommandItem
+                  key={option.id}
+                  value={`强调色 accent ${option.id} ${option.label}`}
+                  onSelect={() => {
+                    setAccent(option.id);
+                    setCmdOpen(false);
+                    toast.success(`强调色已切换为：${option.label}`);
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="size-3 shrink-0 rounded-full ring-1 ring-black/15 dark:ring-white/20"
+                    style={{ backgroundColor: option.swatch }}
+                  />
+                  <span>强调色：{option.label}</span>
+                  {accent === option.id && <CommandShortcut>当前</CommandShortcut>}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </CommandDialog>
+
       <Toaster position="top-right" />
     </div>
   );

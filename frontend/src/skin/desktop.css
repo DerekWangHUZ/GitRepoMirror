@@ -1,0 +1,92 @@
+/* ============================================================================
+   来源：macUI-SolidGlass 模板本机副本（desktop/src/skin/desktop.css），复制日期 2026-11-22。
+   token 禁止手工微调 —— 一切取值改动必须回到模板仓库进行。
+   （本仓适配：.window::after 关闭规则保留；data-wails-drag 属性接线沿用
+    chrome.css 的 [data-wails-drag] 契约，拖动区选择器同步本仓侧栏结构。）
+
+   桌面版窗口皮肤（只在桌面运行时生效，网页版不受影响）
+   - 红绿灯接到真正的窗口行为：关闭 / 最小化 / 最大化
+   - 拖动：侧栏头部 + 窄窗顶栏 + 内容区顶部 22px 拖拽带（Wails 的 --wails-draggable）
+   自定义属性 --wails-draggable 会向下继承，所以交互元素单独写 no-drag。
+   ========================================================================== */
+
+/* ------------------------------------------------- 红绿灯接到真正的窗口 */
+.traffic .light {
+  cursor: pointer;
+}
+
+.light--close:hover,
+.light--min:hover,
+.light--max:hover {
+  filter: brightness(0.96);
+}
+
+/* ---------------------------------------------------------- 拖动区 */
+/* 侧栏头部与窄窗顶栏整块可拖，但红绿灯、菜单按钮与导航区必须 no-drag */
+.sidebar__header,
+.sidebar__chrome,
+.mobile-topbar {
+  --wails-draggable: drag;
+}
+
+.traffic,
+.mobile-topbar__menu,
+.nav-link,
+.nav-section-title,
+.sidebar__search-wrap,
+.sidebar__scroll,
+.sidebar__footer {
+  --wails-draggable: no-drag;
+}
+
+/* 内容区顶部 22px 拖拽带：标题文字从 58px 处开始，22px 的带不会压到标题，
+   但够高、好按住 */
+.drag-strip {
+  position: fixed;
+  top: 0;
+  left: calc(var(--sidebar-w) + var(--sidebar-gap));
+  right: 0;
+  height: 22px;
+  z-index: 30;
+  --wails-draggable: drag;
+}
+
+@media (max-width: 860px) {
+  /* 窄窗下内容区是全屏滚动的，顶部拖拽带会挡住顶栏的交互 */
+  .drag-strip {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------ 窗口外缘 1px 描边 */
+/* 桌面端由 body::after 统一绘制唯一一层 1px 描边，先关掉 .window::after
+   避免四条直线边与圆角边框双重叠加导致直线变粗变深；
+   同时将圆角半径微增 +1px，让 45° 弧线落入 SetWindowRgn 1 位掩码安全区，
+   确保四条直线与四个圆角弧线粗细、明暗完全一致。 */
+html.is-desktop .window::after {
+  display: none !important;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  pointer-events: none;
+  border-radius: calc(var(--window-radius) + 1px);
+  border: 1px solid oklch(0.2 0 0 / 15%);
+}
+.dark body::after {
+  border-color: oklch(1 0 0 / 15%);
+}
+html.is-maximized body::after {
+  border-radius: 0;
+  border-color: transparent;
+}
+
+/* ---------------------------------------------------- 桌面版不画窗口圆角 */
+/* 网页版用 CSS 把视口裁成圆角看着像窗口；桌面版的圆角由 Go 侧的
+   SetWindowRgn 裁出，CSS 再裁一次会让边缘出现两层毛边。 */
+html.is-desktop .window {
+  border-radius: 0 !important;
+}

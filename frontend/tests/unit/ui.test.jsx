@@ -133,9 +133,10 @@ describe("UI contracts", () => {
         onOpenURL={() => {}}
       />,
     );
+    // S8 工具栏范式：动作集中在 .toolbar__actions（原 grm-head-actions）。
     const syncAllButton = screen
       .getAllByRole("button", { name: /全部同步/ })
-      .find((button) => button.closest(".grm-head-actions"));
+      .find((button) => button.closest(".toolbar__actions"));
     expect(syncAllButton).toBeTruthy();
     expect(syncAllButton.disabled).toBe(true);
     const syncOneButton = screen
@@ -143,6 +144,46 @@ describe("UI contracts", () => {
       .find((button) => button.closest(".grm-repo-actions"));
     expect(syncOneButton).toBeTruthy();
     expect(syncOneButton.disabled).toBe(true);
+    cleanup();
+  });
+
+  it("aligns the shell contract: toolbar title + page subtitle + section title", () => {
+    render(
+      <RepositoriesView
+        repositories={[]}
+        busy={new Set()}
+        onSyncAll={() => {}}
+        onNewMirror={() => {}}
+        onSyncOne={() => {}}
+        onRemove={() => {}}
+        onOpenURL={() => {}}
+      />,
+    );
+    expect(document.querySelector(".toolbar__title")).toBeTruthy();
+    expect(document.querySelector(".toolbar__actions")).toBeTruthy();
+    expect(document.querySelector(".page-subtitle")).toBeTruthy();
+    cleanup();
+    render(
+      <RepositoriesView
+        repositories={[
+          {
+            id: "repo",
+            status: "healthy",
+            mode: "mirror",
+            source: { platform: "github", displayName: "source" },
+            target: { platform: "gitlab", displayName: "target" },
+          },
+        ]}
+        busy={new Set()}
+        onSyncAll={() => {}}
+        onNewMirror={() => {}}
+        onSyncOne={() => {}}
+        onRemove={() => {}}
+        onOpenURL={() => {}}
+      />,
+    );
+    // 仓库分节用 section-title（S8 页面范式）。
+    expect(document.querySelector(".section-title")).toBeTruthy();
     cleanup();
   });
 
@@ -201,6 +242,38 @@ describe("UI contracts", () => {
     screen.getByRole("button", { name: "最小化" }).click();
     screen.getByRole("button", { name: "最大化" }).click();
     expect(calls).toEqual(["close", "min", "max"]);
+  });
+
+  it("exposes data-win handles for the desktop event delegation", () => {
+    render(
+      <TrafficLights
+        onClose={() => {}}
+        onMinimize={() => {}}
+        onMaximize={() => {}}
+        maximized
+      />,
+    );
+    // S5：桌面接线（skin/desktop.js）按 data-win 委托接管红绿灯。
+    expect(document.querySelector('[data-win="close"]')).toBeTruthy();
+    expect(document.querySelector('[data-win="min"]')).toBeTruthy();
+    expect(document.querySelector('[data-win="max"]')).toBeTruthy();
+    // 最大化时绿色灯给出还原语义。
+    expect(screen.getByRole("button", { name: "还原" })).toBeTruthy();
+  });
+
+  it("covers the 8 Apple accent options with graphite included", async () => {
+    const { ACCENT_OPTIONS } = await import("@/lib/theme");
+    const ids = ACCENT_OPTIONS.map((option) => option.id);
+    expect(ids).toEqual([
+      "blue",
+      "purple",
+      "pink",
+      "red",
+      "orange",
+      "yellow",
+      "green",
+      "graphite",
+    ]);
   });
 
   it("renders platform icons as inert svg", () => {
