@@ -60,9 +60,13 @@
 
 /* ------------------------------------------------------ 窗口外缘 1px 描边 */
 /* 桌面端由 body::after 统一绘制唯一一层 1px 描边，先关掉 .window::after
-   避免四条直线边与圆角边框双重叠加导致直线变粗变深；
-   同时将圆角半径微增 +1px，让 45° 弧线落入 SetWindowRgn 1 位掩码安全区，
-   确保四条直线与四个圆角弧线粗细、明暗完全一致。 */
+   避免四条直线边与圆角边框双重叠加导致直线变粗变深。
+   配方（macUI 项目实测标定，随模板 814eb23 修正）：
+   - 必须用 box-shadow: inset 0 0 0 1px + 基准圆角（32px，不加不减）。
+     inset 阴影环落在描边路径内侧，环带处于区域掩码（SetWindowRgn 1 位掩码，
+     半径 = 32px × DPI 缩放）之内，四角弧段与直线段一样完整可见。
+   - 禁止用 border: 1px solid + 圆角 +1px：border 画在路径外侧，+1px 会把
+     环带推到掩码之外，四角弧段被 1 位掩码整段裁掉（直线有框、圆角断线）。 */
 html.is-desktop .window::after {
   display: none !important;
 }
@@ -73,15 +77,15 @@ body::after {
   inset: 0;
   z-index: 120;
   pointer-events: none;
-  border-radius: calc(var(--window-radius) + 1px);
-  border: 1px solid oklch(0.2 0 0 / 15%);
+  border-radius: var(--window-radius);
+  box-shadow: inset 0 0 0 1px oklch(0.2 0 0 / 15%);
 }
 .dark body::after {
-  border-color: oklch(1 0 0 / 15%);
+  box-shadow: inset 0 0 0 1px oklch(1 0 0 / 15%);
 }
 html.is-maximized body::after {
   border-radius: 0;
-  border-color: transparent;
+  box-shadow: none;
 }
 
 /* ---------------------------------------------------- 桌面版不画窗口圆角 */
