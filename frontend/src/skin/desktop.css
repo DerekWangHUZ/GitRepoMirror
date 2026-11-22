@@ -39,15 +39,22 @@
   --wails-draggable: no-drag;
 }
 
-/* 内容区顶部 22px 拖拽带：标题文字从 58px 处开始，22px 的带不会压到标题，
-   但够高、好按住 */
+/* 内容区顶部拖拽带：填满工具栏上方的整段让位（page-inner 顶部 48px），
+   48px 的高度好抓、不易脱手。工具栏标题区（.toolbar__heading，纯文本
+   无交互子元素）一并可拖，双击它等于双击标题栏（desktop.js）。 */
 .drag-strip {
   position: fixed;
   top: 0;
   left: calc(var(--sidebar-w) + var(--sidebar-gap));
   right: 0;
-  height: 22px;
+  height: 48px;
   z-index: 30;
+  --wails-draggable: drag;
+}
+
+/* 工具栏标题区：macOS 惯例——标题就是拖把。只挂纯文本容器，
+   不挂整条 .toolbar，避免继承到动作按钮区。 */
+.toolbar__heading {
   --wails-draggable: drag;
 }
 

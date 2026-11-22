@@ -71,7 +71,7 @@
     var rt = runtime()
     if (!rt || !isElement(event.target)) return
     if (event.target.closest("button, a, input, select, textarea, .traffic")) return
-    if (!event.target.closest(".sidebar__chrome, .sidebar__header, .drag-strip, .mobile-topbar")) return
+    if (!event.target.closest(".sidebar__chrome, .sidebar__header, .drag-strip, .mobile-topbar, .toolbar__heading")) return
     toggleMaximise(rt)
   })
 
