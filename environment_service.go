@@ -7,27 +7,21 @@ import (
 
 func (a *App) CheckEnvironment() EnvironmentStatus {
 	status := EnvironmentStatus{
-		Git: installedTool("git"), GitLFS: installedTool("git-lfs"),
+		Git: installedTool(a, "git"), GitLFS: installedTool(a, "git-lfs"),
 	}
+	// 注册表驱动：每个平台定义通过 StatusField 写入自己的状态槽位，
+	// 新平台只需要提供定义，不再维护手写 switch。
 	for _, definition := range managedPlatforms() {
-		switch definition.ID {
-		case PlatformGitHub:
-			status.GitHub = a.checkPlatformTool(definition)
-		case PlatformGitLab:
-			status.GitLab = a.checkPlatformTool(definition)
-		case PlatformGitee:
-			status.Gitee = a.checkPlatformTool(definition)
-		case PlatformCodeberg:
-			status.Codeberg = a.checkPlatformTool(definition)
-		case PlatformAzureDevOps:
-			status.AzureDevOps = a.checkPlatformTool(definition)
+		if definition.StatusField == nil {
+			continue
 		}
+		*definition.StatusField(&status) = a.checkPlatformTool(definition)
 	}
 	return status
 }
 
-func installedTool(name string) ToolStatus {
-	path, err := findExecutable(name)
+func installedTool(app *App, name string) ToolStatus {
+	path, err := app.resolveExecutable(name)
 	if err != nil {
 		return ToolStatus{Message: "未安装"}
 	}
@@ -36,7 +30,7 @@ func installedTool(name string) ToolStatus {
 
 func (a *App) checkPlatformTool(definition *platformDefinition) ToolStatus {
 	name := definition.CLI
-	status := installedTool(name)
+	status := installedTool(a, name)
 	if !status.Installed {
 		status.Message = fmt.Sprintf("未安装 %s，可使用完整 URL 降级同步", name)
 		return status
@@ -87,7 +81,7 @@ func (a *App) StartLogin(platform string) error {
 	if definition == nil || definition.LoginArgs == nil {
 		return fmt.Errorf("该平台不支持 CLI 登录")
 	}
-	path, err := findExecutable(definition.CLI)
+	path, err := a.resolveExecutable(definition.CLI)
 	if err != nil {
 		return fmt.Errorf("未找到 %s", definition.CLI)
 	}

@@ -43,6 +43,14 @@ func (a *App) CreateMirror(req MirrorRequest) (Repository, error) {
 	}
 	repo := Repository{ID: id, Source: source, Target: target, ManagementMode: management, Visibility: visibility, Mode: req.Mode, Status: "syncing", CreatedAt: time.Now()}
 	if err := a.performSync(repo, req.SyncLFS, environment); err != nil {
+		if errors.Is(err, errRestoreWarning) {
+			// 镜像内容已推送成功：记录保持 healthy，错误经返回值提示。
+			repo.Status, repo.LastSync = "healthy", time.Now()
+			if saveErr := a.upsertRepository(repo); saveErr != nil {
+				return repo, saveErr
+			}
+			return repo, err
+		}
 		repo.Status, repo.LastError = "failed", err.Error()
 		if saveErr := a.upsertRepository(repo); saveErr != nil {
 			return repo, errors.Join(err, saveErr)
@@ -120,7 +128,10 @@ func (a *App) syncRepository(id string, batchMember bool) error {
 		return err
 	}
 	err = a.performSync(repo, syncLFS, environment)
-	if err != nil {
+	if errors.Is(err, errRestoreWarning) {
+		// 镜像内容已推送成功：状态记 healthy，告警经日志与返回值传达。
+		repo.Status, repo.LastSync, repo.LastError = "healthy", time.Now(), ""
+	} else if err != nil {
 		repo.Status, repo.LastError = "failed", err.Error()
 	} else {
 		repo.Status, repo.LastSync = "healthy", time.Now()
@@ -150,9 +161,11 @@ func (a *App) SyncAll() error {
 	for _, repository := range repositories {
 		repository := repository
 		wg.Add(1)
+		// 先取信号量再启动 goroutine：同时在途的仓库不超过 limit，
+		// 也不会一次性为整个仓库列表创建协程。
+		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
-			sem <- struct{}{}
 			defer func() { <-sem }()
 			if err := a.syncRepository(repository.ID, true); err != nil {
 				errorsMu.Lock()

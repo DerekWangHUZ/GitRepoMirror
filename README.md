@@ -24,7 +24,7 @@ GitRepoMirror 是一款面向 Windows 的桌面 Git 仓库镜像工具，用于�
 
 ## 下载与运行
 
-从 [Releases](https://gitlab.com/DerekWangHUZ/GitRepoMirror/-/releases) 下载 `GitRepoMirror.exe`。
+从 [Releases](https://codeberg.org/DerekWangHUZ/GitRepoMirror/releases) 下载 `GitRepoMirror-v2.1-windows-amd64.exe`。
 
 运行要求：
 

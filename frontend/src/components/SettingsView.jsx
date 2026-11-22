@@ -1,6 +1,5 @@
 // 设置视图：迁移自 templates.js 的 settingsView。
 // 受控表单：默认值来自后端，编辑后由 App 持有草稿并统一提交。
-import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import {
   Select,

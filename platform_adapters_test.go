@@ -12,10 +12,10 @@ var errTestNotFound = errors.New("未找到命令")
 
 func TestCloneCommandFallsBackToGitForNewPlatforms(t *testing.T) {
 	ready := EnvironmentStatus{
-		GitHub:    ToolStatus{Installed: true, Authenticated: true},
-		GitLab:    ToolStatus{Installed: true, Authenticated: true},
-		Gitee:     ToolStatus{Installed: true, Authenticated: true},
-		Codeberg:  ToolStatus{Installed: true, Authenticated: true},
+		GitHub:      ToolStatus{Installed: true, Authenticated: true},
+		GitLab:      ToolStatus{Installed: true, Authenticated: true},
+		Gitee:       ToolStatus{Installed: true, Authenticated: true},
+		Codeberg:    ToolStatus{Installed: true, Authenticated: true},
 		AzureDevOps: ToolStatus{Installed: true, Authenticated: true},
 	}
 	remote := RemoteSpec{Platform: PlatformGitee, CloneURL: "https://gitee.com/team/repo.git"}
@@ -94,10 +94,10 @@ func TestCheckPlatformToolAzureReadsAccountName(t *testing.T) {
 
 func TestParseForgejoLoginHandlesLocalizedOutput(t *testing.T) {
 	cases := map[string]string{
-		"currently signed into cb-user@codeberg.org":        "cb-user",
-		"当前已登录 cb-user@codeberg.org":                        "cb-user",
-		"Momentan angemeldet als: cb-user@codeberg.org":     "cb-user",
-		"Error: api error: token was already used":          "",
+		"currently signed into cb-user@codeberg.org":    "cb-user",
+		"当前已登录 cb-user@codeberg.org":                    "cb-user",
+		"Momentan angemeldet als: cb-user@codeberg.org": "cb-user",
+		"Error: api error: token was already used":      "",
 	}
 	for output, want := range cases {
 		if got := parseForgejoLogin(output); got != want {
@@ -126,11 +126,11 @@ func TestResolveTargetGiteeCreatesWithCLI(t *testing.T) {
 		return nil
 	}
 	remote, management, visibility, err := app.resolveTarget("id", MirrorRequest{
-		TargetPlatform: PlatformGitee,
-		TargetName:     "repo",
+		TargetPlatform:  PlatformGitee,
+		TargetName:      "repo",
 		TargetNamespace: "team",
-		Visibility:     "private",
-		ConflictPolicy: "error",
+		Visibility:      "private",
+		ConflictPolicy:  "error",
 	}, RemoteSpec{}, EnvironmentStatus{Gitee: ToolStatus{Installed: true, Authenticated: true, Login: "gitee-user"}})
 	if err != nil {
 		t.Fatal(err)

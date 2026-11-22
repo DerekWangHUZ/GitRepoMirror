@@ -1,7 +1,10 @@
 package main
 
 import (
+	"errors"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -122,5 +125,115 @@ func TestPrepareGitLabForcePushRestoresProtection(t *testing.T) {
 	}
 	if !reflect.DeepEqual(commands, want) {
 		t.Fatalf("unexpected GitLab API calls: %#v", commands)
+	}
+}
+
+// restoreWarningHooks wires an app whose GitLab protection restore fails while
+// everything else succeeds: for-each-ref reports "main", the relax PATCH works
+// and the restore PATCH is rejected.
+func restoreWarningHooks(app *App) {
+	app.quietHook = func(_ string, name string, args ...string) (string, error) {
+		switch {
+		case name == "git" && len(args) > 0 && args[0] == "for-each-ref":
+			return "main\n", nil
+		case name == "glab" && reflect.DeepEqual(args, []string{"api", "projects/team%2Frepo/protected_branches?per_page=100"}):
+			return `[{"name":"main","allow_force_push":false}]`, nil
+		case name == "glab" && len(args) == 4 && strings.HasSuffix(args[3], "allow_force_push=true"):
+			return "", nil
+		case name == "glab" && len(args) == 4 && strings.HasSuffix(args[3], "allow_force_push=false"):
+			return "forbidden", errors.New("exit status 1")
+		}
+		return "", nil
+	}
+	app.commandHook = func(_ string, _ string, _ string, _ ...string) error { return nil }
+}
+
+func restoreWarningRepository(id string) Repository {
+	return Repository{
+		ID:             id,
+		Mode:           "mirror",
+		ManagementMode: ManagementCLI,
+		Source:         RemoteSpec{Platform: PlatformGeneric, CloneURL: "https://code.example/source.git"},
+		Target:         RemoteSpec{Platform: PlatformGitLab, Namespace: "team", Repository: "repo", CloneURL: "https://gitlab.com/team/repo.git"},
+	}
+}
+
+func TestPerformSyncMarksPushDoneWhenRestoreFails(t *testing.T) {
+	app := NewApp()
+	events := &recordingEventSink{}
+	app.events = events
+	restoreWarningHooks(app)
+	err := app.performSync(restoreWarningRepository("restore"), false, EnvironmentStatus{})
+	if err == nil || !strings.Contains(err.Error(), "镜像已推送") {
+		t.Fatalf("expected restore warning error, got %v", err)
+	}
+	if !errors.Is(err, errRestoreWarning) {
+		t.Fatalf("error must carry the restore warning sentinel: %v", err)
+	}
+	for _, event := range events.progress {
+		if event.Step == 3 && event.Status == "failed" {
+			t.Fatalf("restore failure must not mark the push failed: %#v", events.progress)
+		}
+	}
+	found := false
+	for _, event := range events.progress {
+		if event.Step == 3 && event.Status == "done" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("successful push must emit step-3 done: %#v", events.progress)
+	}
+}
+
+func TestSyncRepositoryKeepsHealthyWhenRestoreFails(t *testing.T) {
+	t.Setenv("APPDATA", t.TempDir())
+	app := NewApp()
+	restoreWarningHooks(app)
+	data := app.store.Snapshot()
+	data.Repositories = []Repository{restoreWarningRepository("restore")}
+	app.store.Replace(data)
+	err := app.SyncRepository("restore")
+	if err == nil || !errors.Is(err, errRestoreWarning) {
+		t.Fatalf("expected restore warning, got %v", err)
+	}
+	repository, _ := app.repositoryByID("restore")
+	if repository.Status != "healthy" || repository.LastError != "" || repository.LastSync.IsZero() {
+		t.Fatalf("restore warning must keep the record healthy: %#v", repository)
+	}
+}
+
+func TestGitOnlyGitLabTargetSkipsProtectionNegotiation(t *testing.T) {
+	app := NewApp()
+	events := &recordingEventSink{}
+	app.events = events
+	var quietCommands [][]string
+	app.quietHook = func(_ string, name string, args ...string) (string, error) {
+		quietCommands = append(quietCommands, append([]string{name}, args...))
+		return "", nil
+	}
+	var commands [][]string
+	app.commandHook = func(_ string, _ string, name string, args ...string) error {
+		commands = append(commands, append([]string{name}, args...))
+		return nil
+	}
+	repo := Repository{
+		ID:             "gitonly",
+		Mode:           "mirror",
+		ManagementMode: ManagementGitOnly,
+		Source:         RemoteSpec{Platform: PlatformGeneric, CloneURL: "https://code.example/source.git"},
+		Target:         RemoteSpec{Platform: PlatformGitLab, CloneURL: "https://gitlab.com/team/repo.git"},
+	}
+	if err := app.performSync(repo, false, EnvironmentStatus{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range quietCommands {
+		if command[0] == "glab" {
+			t.Fatalf("git-only target must not query the GitLab API: %#v", quietCommands)
+		}
+	}
+	push := pushCommandArgs(commands)
+	if push == nil || !slices.Contains(push, "--force") {
+		t.Fatalf("git-only target must fall back to a forced push: %#v", push)
 	}
 }

@@ -130,3 +130,35 @@ func TestRemoveRepositoryProtectsGitOnlyRemote(t *testing.T) {
 		t.Fatal("local record was not removed")
 	}
 }
+
+func TestEnvironmentToolUsesRegistryStatusField(t *testing.T) {
+	status := EnvironmentStatus{Gitee: ToolStatus{Installed: true, Authenticated: true}}
+	if tool := status.Tool(PlatformGitee); !tool.Installed {
+		t.Fatal("registry StatusField must expose the platform slot")
+	}
+	if tool := status.Tool(PlatformGeneric); tool.Installed {
+		t.Fatal("unknown platforms must yield the zero status")
+	}
+}
+
+func TestCheckEnvironmentHonoursExecutableHook(t *testing.T) {
+	app := NewApp()
+	app.executableHook = func(name string) (string, error) {
+		if name == "git" {
+			return "C:\\git\\cmd\\git.exe", nil
+		}
+		return "", errors.New("未找到命令: " + name)
+	}
+	status := app.CheckEnvironment()
+	if !status.Git.Installed || status.Git.Path != "C:\\git\\cmd\\git.exe" {
+		t.Fatalf("git status did not come from the executable hook: %#v", status.Git)
+	}
+	if status.GitLFS.Installed {
+		t.Fatal("git-lfs must report as missing when the hook rejects it")
+	}
+	for _, definition := range managedPlatforms() {
+		if status.Tool(definition.ID).Installed {
+			t.Fatalf("platform %s must report as missing when the hook rejects it", definition.ID)
+		}
+	}
+}

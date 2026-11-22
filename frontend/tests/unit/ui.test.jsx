@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
-import { appendLog, createLogs } from "@/lib/logs";
+import { appendLog, createLogs, MAX_LOGS } from "@/lib/logs";
 import {
   environmentRowModel,
   formatTime,
@@ -41,11 +41,11 @@ describe("UI contracts", () => {
     });
   });
 
-  it("caps logs at one thousand entries", () => {
+  it("caps logs at MAX_LOGS entries", () => {
     const logs = createLogs();
-    for (let index = 0; index < 1005; index += 1)
+    for (let index = 0; index < MAX_LOGS + 5; index += 1)
       appendLog(logs, { message: String(index) });
-    expect(logs).toHaveLength(1000);
+    expect(logs).toHaveLength(MAX_LOGS);
     expect(logs[0].message).toBe("5");
   });
 

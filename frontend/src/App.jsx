@@ -25,7 +25,6 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-  CommandShortcut,
 } from "@/components/ui/command";
 import { Toaster } from "@/components/ui/sonner";
 import { backend, EventsOn } from "@/backend";

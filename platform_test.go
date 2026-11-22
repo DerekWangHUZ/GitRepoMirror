@@ -206,6 +206,53 @@ func TestCommandEnvForRemotesSkipsHelpersWithoutGlab(t *testing.T) {
 	}
 }
 
+func TestCommandEnvForRemotesMergesGiteeAndGitHubStrategies(t *testing.T) {
+	app := NewApp()
+	app.executableHook = func(name string) (string, error) {
+		if name == "gh" {
+			return "C:\\Program Files\\GitHub CLI\\gh.exe", nil
+		}
+		return "", errors.New("未找到命令: " + name)
+	}
+	app.quietHook = func(_ string, name string, args ...string) (string, error) {
+		switch {
+		case name == "gitee" && reflect.DeepEqual(args, []string{"auth", "token"}):
+			return "gitee-token\n", nil
+		case name == "gitee" && reflect.DeepEqual(args, []string{"api", "user"}):
+			return `{"login":"gitee-user"}`, nil
+		}
+		return "", nil
+	}
+	environment := app.commandEnvForRemotes(
+		RemoteSpec{Platform: PlatformGitee, CloneURL: "https://gitee.com/team/source.git"},
+		RemoteSpec{Platform: PlatformGitHub, CloneURL: "https://github.com/team/target.git"},
+	)
+	if got := environmentValue(environment, "GIT_CONFIG_KEY_0"); got != "http.https://gitee.com/.extraheader" {
+		t.Fatalf("gitee extra header is missing: %q", got)
+	}
+	if got := environmentValue(environment, "GIT_CONFIG_KEY_1"); got != "credential.https://github.com.helper" {
+		t.Fatalf("github helper is missing for a Gitee to GitHub sync: %q", got)
+	}
+	if got := environmentValue(environment, "GIT_CONFIG_VALUE_1"); got != "!gh auth git-credential" {
+		t.Fatalf("github helper value is missing: %q", got)
+	}
+	if got := environmentValue(environment, "GIT_CONFIG_COUNT"); got != "2" {
+		t.Fatalf("unexpected config count: %q", got)
+	}
+	assertGitConfigPairsMatchCount(t, environment)
+}
+
+func TestCommandEnvForRemotesCollapsesDuplicateStrategies(t *testing.T) {
+	app := NewApp()
+	app.executableHook = fakeExecutableLookup()
+	source := RemoteSpec{Platform: PlatformGitLab, CloneURL: "https://gitlab.com/team/source.git"}
+	environment := app.commandEnvForRemotes(source, source)
+	if got := environmentValue(environment, "GIT_CONFIG_COUNT"); got != "3" {
+		t.Fatalf("duplicate remotes must not double the config entries: %q", got)
+	}
+	assertGitConfigPairsMatchCount(t, environment)
+}
+
 func TestGitConfigOverridesAreAcceptedByGit(t *testing.T) {
 	git, err := findExecutable("git")
 	if err != nil {

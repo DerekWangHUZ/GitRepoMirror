@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+// errRestoreWarning marks a sync whose mirror push already succeeded but
+// whose GitLab protection restore failed. Callers persist a healthy status
+// and surface the message instead of marking the mirror failed.
+var errRestoreWarning = errors.New("restore warning")
+
 func (a *App) performSync(repo Repository, syncLFS bool, environment EnvironmentStatus) error {
 	tempDir, err := os.MkdirTemp("", "git-repo-mirror-*")
 	if err != nil {
@@ -28,7 +33,14 @@ func (a *App) performSync(repo Repository, syncLFS bool, environment Environment
 	}
 	a.emitProgress(repo.ID, 2, "拉取源仓库", "done")
 	a.emitProgress(repo.ID, 3, "推送目标仓库", "running")
-	branches := []string(nil)
+	definition := platformByID(repo.Target.Platform)
+	// 只有 CLI 管理的目标才尝试保护分支协商；命名空间缺失的记录直接走
+	// 强制推送，避免向注定失败的 API 端点发起请求。
+	needsNegotiation := definition != nil && definition.ForceNegotiation &&
+		repo.ManagementMode == ManagementCLI &&
+		strings.TrimSpace(repo.Target.Namespace) != "" &&
+		strings.TrimSpace(repo.Target.Repository) != ""
+	var branches []string
 	if repo.Mode == "shallow" {
 		branch, err := a.runQuietInWithEnv(cloneDir, commandEnvironment, "git", "branch", "--show-current")
 		if err != nil || strings.TrimSpace(branch) == "" {
@@ -36,20 +48,13 @@ func (a *App) performSync(repo Repository, syncLFS bool, environment Environment
 			return fmt.Errorf("无法识别源仓库默认分支")
 		}
 		branches = []string{strings.TrimSpace(branch)}
-	} else {
-		definition := platformByID(repo.Target.Platform)
-		if definition != nil && definition.ForceNegotiation && repo.ManagementMode == ManagementCLI {
-			var err error
-			branches, err = localBranches(cloneDir, commandEnvironment, a)
-			if err != nil {
-				a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
-				return fmt.Errorf("无法读取源仓库分支: %w", err)
-			}
+	} else if needsNegotiation {
+		var err error
+		branches, err = localBranches(cloneDir, commandEnvironment, a)
+		if err != nil {
+			a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
+			return fmt.Errorf("无法读取源仓库分支: %w", err)
 		}
-	}
-	needsNegotiation := false
-	if definition := platformByID(repo.Target.Platform); definition != nil {
-		needsNegotiation = definition.ForceNegotiation && repo.ManagementMode == ManagementCLI
 	}
 	restoreProtection, force, err := a.prepareForcePush(repo, branches, needsNegotiation)
 	if err != nil {
@@ -71,12 +76,15 @@ func (a *App) performSync(repo Repository, syncLFS bool, environment Environment
 		}
 		return fmt.Errorf("推送目标仓库失败: %w", pushErr)
 	}
+	// 推送已成功：无论保护规则是否恢复，第 3 步都算完成，不能把
+	// “恢复保护失败”误标为推送失败。
+	a.emitProgress(repo.ID, 3, "推送目标仓库", "done")
 	if restoreErr != nil {
-		a.emitProgress(repo.ID, 3, "推送目标仓库", "failed")
-		return fmt.Errorf("恢复 GitLab 分支保护失败: %w", restoreErr)
+		a.emitLog(repo.ID, "warning", "镜像已推送，但恢复 GitLab 分支保护失败，请手动检查目标仓库的分支保护设置: "+restoreErr.Error())
+		return fmt.Errorf("%w镜像已推送，但恢复 GitLab 分支保护失败: %w", errRestoreWarning, restoreErr)
 	}
 	if syncLFS {
-		if _, err := findExecutable("git-lfs"); err != nil {
+		if _, err := a.resolveExecutable("git-lfs"); err != nil {
 			a.emitLog(repo.ID, "warning", "未安装 Git LFS，已跳过大文件对象")
 		} else {
 			a.emitLog(repo.ID, "info", "正在同步 Git LFS 对象")
@@ -88,7 +96,6 @@ func (a *App) performSync(repo Repository, syncLFS bool, environment Environment
 			}
 		}
 	}
-	a.emitProgress(repo.ID, 3, "推送目标仓库", "done")
 	a.emitProgress(repo.ID, 4, "清理临时文件", "done")
 	return nil
 }

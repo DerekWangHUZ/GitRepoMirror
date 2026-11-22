@@ -44,6 +44,9 @@ type platformDefinition struct {
 	// WebURL builds the browse URL for a managed namespace/repository. nil
 	// falls back to https://<host>/<namespace>/<repository>.
 	WebURL func(namespace, repository string) string
+	// StatusField addresses the platform's slot inside EnvironmentStatus, so
+	// environment checks iterate the registry instead of hand-written switches.
+	StatusField func(status *EnvironmentStatus) *ToolStatus
 }
 
 var platformRegistry = map[string]*platformDefinition{
@@ -91,22 +94,15 @@ func forceNegotiationRequired(platform string) bool {
 	return definition != nil && definition.ForceNegotiation
 }
 
-// Tool selects the EnvironmentStatus field of a platform. The JSON contract
-// keeps dedicated fields, so the mapping stays explicit.
+// Tool selects the EnvironmentStatus field of a platform via the registry's
+// StatusField mapping. The JSON contract keeps dedicated fields; the mapping
+// itself lives with each platform definition. Unknown platforms yield zero.
 func (status EnvironmentStatus) Tool(platform string) ToolStatus {
-	switch platform {
-	case PlatformGitHub:
-		return status.GitHub
-	case PlatformGitLab:
-		return status.GitLab
-	case PlatformGitee:
-		return status.Gitee
-	case PlatformCodeberg:
-		return status.Codeberg
-	case PlatformAzureDevOps:
-		return status.AzureDevOps
+	definition := platformByID(platform)
+	if definition == nil || definition.StatusField == nil {
+		return ToolStatus{}
 	}
-	return ToolStatus{}
+	return *definition.StatusField(&status)
 }
 
 func githubPlatform() *platformDefinition {
@@ -131,6 +127,9 @@ func githubPlatform() *platformDefinition {
 		RepoExists: repoExistsViaGitHubAPI,
 		CreateRepo: createRepoViaGitHubCLI,
 		FetchRepo:  fetchRepoViaGitHubAPI,
+		StatusField: func(status *EnvironmentStatus) *ToolStatus {
+			return &status.GitHub
+		},
 	}
 }
 
@@ -158,5 +157,8 @@ func gitlabPlatform() *platformDefinition {
 		CreateRepo: createRepoViaGitLabCLI,
 		FetchRepo:  fetchRepoViaGitLabAPI,
 		WebURL:     nil,
+		StatusField: func(status *EnvironmentStatus) *ToolStatus {
+			return &status.GitLab
+		},
 	}
 }

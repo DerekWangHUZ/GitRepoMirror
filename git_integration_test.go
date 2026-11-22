@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -63,9 +64,26 @@ func runGitTestCommand(t *testing.T, git, dir string, args ...string) string {
 	t.Helper()
 	command := exec.Command(git, args...)
 	command.Dir = dir
+	// 隔离宿主环境的 GIT_CONFIG_* 残留：孤立的键值对（有 VALUE 无 KEY）会让
+	// git 以 "unable to parse command-line config" 失败，与被测代码无关。
+	command.Env = sanitizeGitConfigEnv(os.Environ())
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v failed: %v\n%s", args, err, output)
 	}
 	return string(output)
+}
+
+// sanitizeGitConfigEnv drops inherited GIT_CONFIG_COUNT/KEY_n/VALUE_n entries
+// so the integration test mirrors the app's own defensive behaviour in
+// command_runner.go without depending on a clean host shell.
+func sanitizeGitConfigEnv(environment []string) []string {
+	result := make([]string, 0, len(environment))
+	for _, entry := range environment {
+		if key, _, ok := strings.Cut(entry, "="); ok && isGitConfigEntry(key) {
+			continue
+		}
+		result = append(result, entry)
+	}
+	return result
 }

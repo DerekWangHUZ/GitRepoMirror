@@ -3,12 +3,12 @@ package main
 import "time"
 
 const (
-	PlatformGitHub   = "github"
-	PlatformGitLab   = "gitlab"
-	PlatformGitee    = "gitee"
-	PlatformCodeberg = "codeberg"
+	PlatformGitHub      = "github"
+	PlatformGitLab      = "gitlab"
+	PlatformGitee       = "gitee"
+	PlatformCodeberg    = "codeberg"
 	PlatformAzureDevOps = "azuredevops"
-	PlatformGeneric  = "generic"
+	PlatformGeneric     = "generic"
 
 	ManagementCLI     = "cli"
 	ManagementGitOnly = "git-only"

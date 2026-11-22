@@ -49,3 +49,6 @@ Desktop.ini
 *.bak
 *.swp
 *~
+
+# Local esbuild/TEMP workaround
+build/tmp-esbuild/

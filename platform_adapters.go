@@ -30,6 +30,9 @@ func giteePlatform() *platformDefinition {
 		RepoExists: repoExistsViaGiteeAPI,
 		CreateRepo: createRepoViaGiteeCLI,
 		FetchRepo:  fetchRepoViaGiteeAPI,
+		StatusField: func(status *EnvironmentStatus) *ToolStatus {
+			return &status.Gitee
+		},
 	}
 }
 
@@ -123,6 +126,9 @@ func codebergPlatform() *platformDefinition {
 		RepoExists: repoExistsViaForgejoCLI,
 		CreateRepo: createRepoViaForgejoCLI,
 		FetchRepo:  fetchRepoViaForgejoCLI,
+		StatusField: func(status *EnvironmentStatus) *ToolStatus {
+			return &status.Codeberg
+		},
 	}
 }
 
@@ -227,6 +233,9 @@ func azureDevOpsPlatform() *platformDefinition {
 				return fmt.Errorf("Azure DevOps 目标命名空间需使用 <组织>/<项目>")
 			}
 			return nil
+		},
+		StatusField: func(status *EnvironmentStatus) *ToolStatus {
+			return &status.AzureDevOps
 		},
 	}
 }
@@ -357,6 +366,9 @@ func firstNonEmptyLine(output string) string {
 // giteeCredentialOverrides builds a basic-auth extra header for gitee.com from
 // the CLI-stored personal access token. The token travels only through the
 // child process environment, never through a command line or persistent store.
+// A GitHub remote on the same sync chain keeps receiving the gh helper — the
+// GitLab strategy applied symmetrically — so a Gitee→GitHub push also
+// authenticates when no system credential helper is configured.
 func (a *App) giteeCredentialOverrides() ([][2]string, []string, bool) {
 	tokenOutput, err := a.runQuietStdout("gitee", "auth", "token")
 	if err != nil {
@@ -375,5 +387,11 @@ func (a *App) giteeCredentialOverrides() ([][2]string, []string, bool) {
 		return nil, nil, false
 	}
 	header := "Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte(login+":"+token))
-	return [][2]string{{"http.https://gitee.com/.extraheader", header}}, nil, true
+	entries := [][2]string{{"http.https://gitee.com/.extraheader", header}}
+	var dirs []string
+	if ghDir := a.executableDir("gh"); ghDir != "" {
+		entries = append(entries, [2]string{"credential.https://github.com.helper", "!gh auth git-credential"})
+		dirs = append(dirs, ghDir)
+	}
+	return entries, dirs, true
 }

@@ -17,14 +17,6 @@ import (
 	"time"
 )
 
-// Runner is the narrow process boundary consumed by application services.
-type Runner interface {
-	Quiet(name string, args ...string) (string, error)
-	QuietIn(dir, name string, args ...string) (string, error)
-	Run(id, name string, args ...string) error
-	RunIn(id, dir, name string, args ...string) error
-}
-
 func (a *App) commandEnv() []string {
 	// Inherited GIT_CONFIG_* pairs are dropped: stale or orphaned pairs (a
 	// count without matching keys, for example) make every git invocation fail
@@ -46,16 +38,41 @@ func (a *App) commandEnv() []string {
 	})
 }
 
+// commandEnvForRemotes merges the credential strategies of every remote in the
+// sync chain instead of taking only the first hit: a Gitee→GitHub or
+// GitLab→Gitee mirror needs both platforms' overrides side by side. Duplicate
+// config keys collapse so repeated remotes do not re-query the same CLI token.
 func (a *App) commandEnvForRemotes(remotes ...RemoteSpec) []string {
 	environment := a.commandEnv()
+	var entries [][2]string
+	var dirs []string
 	for _, remote := range remotes {
-		entries, dirs, ok := a.credentialOverridesFor(remote)
+		remoteEntries, remoteDirs, ok := a.credentialOverridesFor(remote)
 		if !ok {
 			continue
 		}
-		return withCredentialHelpers(environment, entries, dirs...)
+		entries = append(entries, remoteEntries...)
+		dirs = append(dirs, remoteDirs...)
 	}
-	return environment
+	if len(entries) == 0 {
+		return environment
+	}
+	return withCredentialHelpers(environment, dedupeConfigEntries(entries), dirs...)
+}
+
+// dedupeConfigEntries keeps the first entry per config key so merged remote
+// strategies cannot emit the same GIT_CONFIG_KEY_n twice.
+func dedupeConfigEntries(entries [][2]string) [][2]string {
+	seen := make(map[string]bool, len(entries))
+	result := make([][2]string, 0, len(entries))
+	for _, entry := range entries {
+		if seen[entry[0]] {
+			continue
+		}
+		seen[entry[0]] = true
+		result = append(result, entry)
+	}
+	return result
 }
 
 // credentialOverridesFor resolves the git-credential environment strategy for
