@@ -52,3 +52,6 @@ Desktop.ini
 
 # Local esbuild/TEMP workaround
 build/tmp-esbuild/
+
+# Release helper scratch
+build/release/

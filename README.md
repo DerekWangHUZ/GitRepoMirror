@@ -77,6 +77,12 @@ GitHub 和普通 Git 的完整镜像会使用强制推送。GitLab CLI 管理的
 
 需要 Go 1.24+、Node.js 20+ 和 Wails CLI v2.11+。
 
+构建与发行前请先运行完整性标签守卫（目录被标成 Low 完整性时，其中的可执行文件会被视为不可信）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\integrity-guard.ps1
+```
+
 ```powershell
 cd frontend
 npm install
